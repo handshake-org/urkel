@@ -1,0 +1,48 @@
+{
+  "name": "btrie",
+  "version": "0.0.0",
+  "description": "Merkelized Patricia Trie (not a b-trie)",
+  "keywords": [
+    "net",
+    "tcp"
+  ],
+  "license": "MIT",
+  "repository": "git://github.com/bcoin-org/btrie.git",
+  "homepage": "https://github.com/bcoin-org/btrie",
+  "bugs": {
+    "url": "https://github.com/bcoin-org/btrie/issues"
+  },
+  "author": "Christopher Jeffrey <chjjeffrey@gmail.com>",
+  "main": "./lib/btrie.js",
+  "scripts": {
+    "browserify": "browserify -s btrie lib/btrie.js | uglifyjs -c > btrie.js",
+    "clean": "rm -f btrie.js",
+    "lint": "eslint lib/ test/ || exit 0",
+    "test": "mocha --reporter spec test/*-test.js",
+    "webpack": "webpack --config webpack.config.js"
+  },
+  "dependencies": {
+    "bcrypto": "~0.0.1",
+    "bufio": "~0.0.1"
+  },
+  "devDependencies": {
+    "babelify": "^8.0.0",
+    "babel-core": "^6.26.0",
+    "babel-loader": "^7.1.2",
+    "babel-preset-env": "^1.6.1",
+    "browserify": "^14.5.0",
+    "eslint": "^4.14.0",
+    "mocha": "^4.0.1",
+    "uglifyjs-webpack-plugin": "^1.1.5",
+    "uglify-es": "^3.1.3",
+    "webpack": "^3.10.0"
+  },
+  "engines": {
+    "node": ">=7.6.0"
+  },
+  "browserify": {
+    "transform": [
+      "babelify"
+    ]
+  }
+}
