@@ -1,6 +1,6 @@
 {
   "name": "btrie",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Merkelized Patricia Trie (not a b-trie)",
   "keywords": [
     "net",
