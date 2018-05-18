@@ -3,7 +3,7 @@
 This directory contains some experiments with other provable data structures:
 
 - `merklix/` - An implementation of a [Merklix Tree][merklix].
-- `smt/` - An implementation of an optimized [Sparse Merkle Trees][smt], based
+- `smt/` - An implementation of an optimized [Sparse Merkle Tree][smt], based
   on [gosmt].
 - `ssmt/` - Simple [Sparse Merkle Tree][smt]. Unoptimized proof-of-concept,
   initially [implemented][ssmt] by Vitalik Buterin. It doesn't do bulk loaded
