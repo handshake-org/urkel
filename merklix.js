@@ -10,7 +10,6 @@
 'use strict';
 
 const assert = require('assert');
-const blake2b = require('bcrypto/lib/blake2b');
 
 /*
  * Constants
@@ -21,70 +20,39 @@ const STATE_KEY = Buffer.from([0x73]);
 const INTERNAL = Buffer.from([0x00]);
 const LEAF = Buffer.from([0x01]);
 
+/*
+ * Error Codes
+ */
+
 const PROOF_OK = 0;
 const PROOF_HASH_MISMATCH = 1;
 const PROOF_MALFORMED_NODE = 2;
 const PROOF_UNEXPECTED_NODE = 3;
 const PROOF_EARLY_END = 4;
 const PROOF_NO_RESULT = 5;
-const PROOF_UNKNOWN_ERROR = 6;
 
 /**
  * MerklixTree
  */
 
 class MerklixTree {
-  constructor(db) {
+  constructor(db, hash) {
+    assert(db && typeof db === 'object');
+    assert(hash && typeof hash.digest === 'function');
+
     this.db = db;
     this.cache = new Cache();
-    this.depth = 0;
-    this.hash = blake2b;
-    this._ctx = null;
-    this._hashes = [];
+    this.hash = hash;
+    this.context = null;
   }
 
   ctx() {
-    if (!this._ctx)
-      this._ctx = this.hash.hash();
-    return this._ctx;
+    if (!this.context)
+      this.context = this.hash.hash();
+    return this.context;
   }
 
-  hashes() {
-    if (this._hashes.length > 0)
-      return this._hashes;
-
-    const buf = Buffer.from('merklix ');
-
-    for (let i = 0; i < 256; i++) {
-      buf[7] = i;
-      this._hashes.push(blake2b.digest(buf));
-    }
-
-    return this._hashes;
-  }
-
-  get zero() {
-    return this.hashDepth(0);
-  }
-
-  isDepth(hash, depth) {
-    const def = this.hashDepth(depth);
-    return hash.equals(def);
-  }
-
-  hashDepth(depth) {
-    return ZERO_HASH;
-  }
-
-  hashInternal(left, right, depth) {
-    const zero = this.hashDepth(depth);
-
-    if (left.equals(zero))
-      return this.hash.digest(right);
-
-    if (right.equals(zero))
-      return this.hash.digest(left);
-
+  hashInternal(left, right) {
     const ctx = this.ctx();
     ctx.init();
     ctx.update(INTERNAL);
@@ -118,7 +86,10 @@ class MerklixTree {
     return raw;
   }
 
-  async readNode(hash, depth) {
+  async readNode(hash) {
+    if (hash.equals(ZERO_HASH))
+      return null;
+
     const raw = await this.read(hash);
 
     if (!raw)
@@ -127,18 +98,16 @@ class MerklixTree {
     if (raw.length === 0)
       throw new Error('Database inconsistency.');
 
-    if (raw.length !== this.sizeNode(raw[0]))
+    if (raw.length !== sizeNode(raw[0]))
       throw new Error('Database inconsistency.');
-
-    const zero = this.hashDepth(depth);
 
     switch (raw[0]) {
       case 0: // 00
-        return [zero, zero];
+        return [ZERO_HASH, ZERO_HASH];
       case 1: // 01
-        return [zero, raw.slice(1, 33)];
+        return [ZERO_HASH, raw.slice(1, 33)];
       case 2: // 10
-        return [raw.slice(1, 33), zero];
+        return [raw.slice(1, 33), ZERO_HASH];
       case 3: // 11
         return [raw.slice(1, 33), raw.slice(33, 65)];
       case 4:
@@ -148,32 +117,16 @@ class MerklixTree {
     }
   }
 
-  sizeNode(field) {
-    switch (field) {
-      case 0: // 00
-        return 1;
-      case 1: // 01
-      case 2: // 10
-      case 4:
-        return 33;
-      case 3: // 11
-        return 65;
-      default:
-        throw new Error('Unknown node.');
-    }
-  }
-
-  putNode(hash, node, depth) {
+  putNode(hash, node) {
     switch (node.length) {
       case 2: {
         const [left, right] = node;
-        const zero = this.hashDepth(depth);
 
         let field = 0;
-        field |= !left.equals(zero) << 1;
-        field |= !right.equals(zero);
+        field |= !left.equals(ZERO_HASH) << 1;
+        field |= !right.equals(ZERO_HASH);
 
-        const size = this.sizeNode(field);
+        const size = sizeNode(field);
         const val = Buffer.allocUnsafe(size);
 
         val[0] = field;
@@ -216,7 +169,7 @@ class MerklixTree {
   }
 
   delNode(hash) {
-    this.cache.del(hash);
+    //this.cache.del(hash);
   }
 
   valueKey(leaf) {
@@ -235,7 +188,7 @@ class MerklixTree {
   }
 
   delValue(leaf) {
-    this.cache.del(this.valueKey(leaf));
+    //this.cache.del(this.valueKey(leaf));
   }
 
   async _get(root, key) {
@@ -244,11 +197,11 @@ class MerklixTree {
 
     // Traverse bits left to right.
     for (;;) {
-      const node = await this.readNode(next, depth);
+      const node = await this.readNode(next);
 
       // Empty (sub)tree.
       if (!node) {
-        if (!this.isDepth(next, depth))
+        if (!next.equals(ZERO_HASH))
           throw new Error('Database inconsistency.');
 
         next = null;
@@ -291,11 +244,11 @@ class MerklixTree {
 
     // Traverse bits left to right.
     for (;;) {
-      const node = await this.readNode(next, depth);
+      const node = await this.readNode(next);
 
       // Empty (sub)tree.
       if (!node) {
-        if (!this.isDepth(next, depth))
+        if (!next.equals(ZERO_HASH))
           throw new Error('Database inconsistency.');
 
         // Replace the empty node.
@@ -313,7 +266,10 @@ class MerklixTree {
           if (leaf.equals(next))
             return [root, null, false];
 
+          // Prune old nodes.
           del.push(next);
+
+          // Value to remove.
           removed = next;
 
           // The branch doesn't grow.
@@ -325,12 +281,10 @@ class MerklixTree {
 
         // Insert dummy nodes to artificially grow
         // the branch if we have bit collisions.
-        // Is there a better way? Not sure.
-        // Potential DoS vector.
         while (hasBit(key, depth) === hasBit(other, depth)) {
           // Child-less sidenode.
           depth += 1;
-          nodes.push(this.hashDepth(depth));
+          nodes.push(ZERO_HASH);
         }
 
         nodes.push(next);
@@ -352,14 +306,11 @@ class MerklixTree {
     for (const hash of del)
       this.delNode(hash);
 
-    // Track max depth.
-    if (depth > this.depth)
-      this.depth = depth;
-
     // Store the key for
     // comparisons later (see above).
-    this.putNode(leaf, [key], depth + 1);
+    this.putNode(leaf, [key]);
 
+    // Start at the leaf.
     next = leaf;
 
     // Traverse bits right to left.
@@ -367,12 +318,12 @@ class MerklixTree {
       const node = nodes.pop();
 
       if (hasBit(key, depth)) {
-        const k = this.hashInternal(node, next, depth);
-        this.putNode(k, [node, next], depth);
+        const k = this.hashInternal(node, next);
+        this.putNode(k, [node, next]);
         next = k;
       } else {
-        const k = this.hashInternal(next, node, depth);
-        this.putNode(k, [next, node], depth);
+        const k = this.hashInternal(next, node);
+        this.putNode(k, [next, node]);
         next = k;
       }
 
@@ -405,7 +356,7 @@ class MerklixTree {
 
     // Traverse bits left to right.
     for (;;) {
-      const node = await this.readNode(next, depth);
+      const node = await this.readNode(next);
 
       // Empty (sub)tree.
       if (!node)
@@ -419,26 +370,15 @@ class MerklixTree {
         if (!key.equals(other))
           return [root, null];
 
+        // Prune old nodes.
         del.push(next);
+
+        // Value to remove.
         removed = next;
 
-        next = this.hashDepth(depth);
+        // The branch doesn't grow.
+        // Replace the current node.
         depth -= 1;
-
-        /*
-        depth -= 2;
-        next = nodes.pop();
-
-        while (nodes.length > 0) {
-          const node = nodes[nodes.length - 1];
-
-          if (!this.isDepth(node, depth + 1))
-            break;
-
-          nodes.pop();
-          depth -= 1;
-        }
-        */
 
         break;
       }
@@ -457,21 +397,20 @@ class MerklixTree {
     for (const hash of del)
       this.delNode(hash);
 
-    // Track max depth.
-    if (depth > this.depth)
-      this.depth = depth;
+    // Replace with a zero hash.
+    next = ZERO_HASH;
 
     // Traverse bits right to left.
     while (nodes.length > 0) {
       const node = nodes.pop();
 
       if (hasBit(key, depth)) {
-        const k = this.hashInternal(node, next, depth);
-        this.putNode(k, [node, next], depth);
+        const k = this.hashInternal(node, next);
+        this.putNode(k, [node, next]);
         next = k;
       } else {
-        const k = this.hashInternal(next, node, depth);
-        this.putNode(k, [next, node], depth);
+        const k = this.hashInternal(next, node);
+        this.putNode(k, [next, node]);
         next = k;
       }
 
@@ -500,11 +439,11 @@ class MerklixTree {
 
     // Traverse bits left to right.
     for (;;) {
-      const node = await this.readNode(next, depth);
+      const node = await this.readNode(next);
 
       // Empty (sub)tree.
       if (!node) {
-        if (!this.isDepth(next, depth))
+        if (!next.equals(ZERO_HASH))
           throw new Error('Database inconsistency.');
 
         nodes.push(next);
@@ -531,11 +470,7 @@ class MerklixTree {
       depth += 1;
     }
 
-    return {
-      nodes,
-      key: k,
-      value: v
-    };
+    return new Proof(nodes, k, v);
   }
 
   verify(root, key, proof) {
@@ -545,6 +480,9 @@ class MerklixTree {
       return [PROOF_EARLY_END, null];
 
     if (nodes.length > 256)
+      return [PROOF_MALFORMED_NODE, null];
+
+    if (proof.value && proof.value.length > 512)
       return [PROOF_MALFORMED_NODE, null];
 
     const leaf = nodes[nodes.length - 1];
@@ -557,9 +495,9 @@ class MerklixTree {
       const node = nodes[depth];
 
       if (hasBit(key, depth))
-        next = this.hashInternal(node, next, depth);
+        next = this.hashInternal(node, next);
       else
-        next = this.hashInternal(next, node, depth);
+        next = this.hashInternal(next, node);
 
       depth -= 1;
     }
@@ -570,7 +508,7 @@ class MerklixTree {
     // Two types of NX proofs.
 
     // Type 1: Non-existent leaf.
-    if (this.isDepth(leaf, nodes.length - 1)) {
+    if (leaf.equals(ZERO_HASH)) {
       if (proof.key)
         return [PROOF_UNEXPECTED_NODE, null];
 
@@ -581,7 +519,7 @@ class MerklixTree {
     }
 
     // Type 2: Prefix collision.
-    // We have to provide the full pre-image
+    // We have to provide the full preimage
     // to prove we're a leaf, and also that
     // we are indeed a different key.
     if (proof.key) {
@@ -610,6 +548,10 @@ class MerklixTree {
 
     return [PROOF_OK, proof.value];
   }
+
+  static get Proof() {
+    return Proof;
+  }
 }
 
 /*
@@ -617,11 +559,11 @@ class MerklixTree {
  */
 
 class Merklix {
-  constructor(db) {
+  constructor(db, hash) {
     this.db = db;
-    this.tree = new MerklixTree(db);
-    this.originalRoot = this.tree.zero;
-    this.root = this.tree.zero;
+    this.tree = new MerklixTree(db, hash);
+    this.originalRoot = ZERO_HASH;
+    this.root = ZERO_HASH;
   }
 
   async open(root) {
@@ -634,7 +576,7 @@ class Merklix {
     if (!root && this.db)
       root = await this.db.get(STATE_KEY);
 
-    if (root && !root.equals(this.tree.zero)) {
+    if (root && !root.equals(ZERO_HASH)) {
       assert(root.length === 32);
 
       if (!this.db)
@@ -649,8 +591,8 @@ class Merklix {
   }
 
   async close() {
-    this.originalRoot = this.tree.zero;
-    this.root = this.tree.zero;
+    this.originalRoot = ZERO_HASH;
+    this.root = ZERO_HASH;
   }
 
   async get(key) {
@@ -688,10 +630,9 @@ class Merklix {
       throw new Error('Cannot snapshot without database.');
 
     const {db} = this;
-    const tree = new this.constructor(db);
-    tree.tree.hash = this.tree.hash;
-    tree.tree._ctx = this.tree._ctx;
-    tree.tree._hashes = this.tree._hashes;
+    const {hash} = this.tree;
+    const tree = new this.constructor(db, hash);
+    tree.tree.context = this.tree.context;
 
     return tree.inject(root);
   }
@@ -722,6 +663,10 @@ class Merklix {
 
   verify(root, key, proof) {
     return this.tree.verify(root, key, proof);
+  }
+
+  static get Proof() {
+    return Proof;
   }
 }
 
@@ -783,6 +728,168 @@ class Cache {
 }
 
 /*
+ * Proof
+ */
+
+class Proof {
+  constructor(nodes, key, value) {
+    this.nodes = [];
+    this.key = null;
+    this.value = null;
+    this.from(nodes, key, value);
+  }
+
+  from(nodes, key, value) {
+    if (nodes != null) {
+      assert(Array.isArray(nodes));
+      this.nodes = nodes;
+    }
+
+    if (key != null) {
+      assert(Buffer.isBuffer(key) && key.length === 32);
+      this.key = key;
+    }
+
+    if (value != null) {
+      assert(Buffer.isBuffer(value));
+      this.value = value;
+    }
+
+    return this;
+  }
+
+  getSize() {
+    let size = 0;
+
+    size += 1;
+    size += (this.nodes.length + 7) / 8 | 0;
+
+    for (const node of this.nodes) {
+      if (!node.equals(ZERO_HASH))
+        size += 32;
+    }
+
+    size += 2;
+
+    if (this.key)
+      size += 32;
+
+    if (this.value)
+      size += this.value.length;
+
+    return size;
+  }
+
+  encode() {
+    const size = this.getSize();
+    const bits = (this.nodes.length + 7) / 8 | 0;
+    const data = Buffer.alloc(size);
+
+    let pos = 0;
+
+    assert(this.nodes.length > 0);
+    assert(this.nodes.length <= 256);
+
+    data[pos] = this.nodes.length - 1;
+
+    pos += 1;
+
+    //data.fill(0x00, pos, pos + bits);
+
+    pos += bits;
+
+    for (let i = 0; i < this.nodes.length; i++) {
+      const node = this.nodes[i];
+
+      if (node.equals(ZERO_HASH))
+        setBit(data, 8 + i);
+      else
+        pos += node.copy(data, pos);
+    }
+
+    let field = 0;
+
+    if (this.key)
+      field |= 1 << 15;
+
+    if (this.value) {
+      // 16kb max
+      assert(this.value.length < (1 << 14));
+      field |= 1 << 14;
+      field |= this.value.length;
+    }
+
+    data[pos] = field & 0xff;
+    pos += 1;
+    data[pos] |= field >>> 8;
+    pos += 1;
+
+    if (this.key)
+      pos += this.key.copy(data, pos);
+
+    if (this.value)
+      pos += this.value.copy(data, pos);
+
+    assert(pos === data.length);
+
+    return data;
+  }
+
+  decode(data) {
+    assert(Buffer.isBuffer(data));
+
+    let pos = 0;
+
+    assert(pos + 1 <= data.length);
+
+    const count = data[pos] + 1;
+    const bits = (count + 7) / 8 | 0;
+
+    pos += 1;
+    pos += bits;
+
+    assert(pos <= data.length);
+
+    for (let i = 0; i < count; i++) {
+      if (hasBit(data, 8 + i)) {
+        this.nodes.push(ZERO_HASH);
+      } else {
+        assert(pos + 32 <= data.length);
+        const hash = data.slice(pos, pos + 32);
+        this.nodes.push(hash);
+        pos += 32;
+      }
+    }
+
+    assert(pos + 2 <= data.length);
+
+    let field = 0;
+    field |= data[pos];
+    field |= data[pos + 1] << 8;
+    pos += 2;
+
+    if (field & (1 << 15)) {
+      assert(pos + 32 <= data.length);
+      this.key = data.slice(pos, pos + 32);
+      pos += 32;
+    }
+
+    if (field & (1 << 14)) {
+      const size = field & ((1 << 14) - 1);
+      assert(pos + size <= data.length);
+      this.value = data.slice(pos, pos + size);
+      pos += size;
+    }
+
+    return this;
+  }
+
+  static decode(data) {
+    return new this().decode(data);
+  }
+}
+
+/*
  * Helpers
  */
 
@@ -790,6 +897,27 @@ function hasBit(key, index) {
   const oct = index >>> 3;
   const bit = index & 7;
   return (key[oct] >>> (7 - bit)) & 1;
+}
+
+function setBit(key, index) {
+  const oct = index >>> 3;
+  const bit = index & 7;
+  key[oct] |= 1 << (7 - bit);
+}
+
+function sizeNode(field) {
+  switch (field) {
+    case 0: // 00
+      return 1;
+    case 1: // 01
+    case 2: // 10
+    case 4:
+      return 33;
+    case 3: // 11
+      return 65;
+    default:
+      throw new Error('Unknown node.');
+  }
 }
 
 /*

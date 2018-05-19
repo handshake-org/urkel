@@ -9,11 +9,15 @@
 class DB {
   constructor(watch = false) {
     this.map = new Map();
-    this.batch = [];
+    this.pending = [];
     this.watch = watch;
     this.items = 0;
     this.size = 0;
   }
+
+  open() {}
+
+  close() {}
 
   has(key) {
     return this.get(key) !== null;
@@ -26,30 +30,17 @@ class DB {
 
   put(key, value) {
     const k = key.toString('hex');
-    this.batch.push([k, value]);
+    this.pending.push([k, value]);
   }
 
   del(key) {
     const k = key.toString('hex');
-    this.batch.push([k, null]);
-  }
-
-  reset() {
-    this.map.clear();
-    this.batch.length = 0;
+    this.pending.push([k, null]);
   }
 
   write() {
-    this.flush();
-  }
-
-  clear() {
-    this.reset();
-  }
-
-  flush() {
     if (this.watch) {
-      for (const [k, v] of this.batch) {
+      for (const [k, v] of this.pending) {
         const c = this.map.get(k);
 
         if (v) {
@@ -71,14 +62,22 @@ class DB {
       }
     }
 
-    for (const [k, v] of this.batch) {
+    for (const [k, v] of this.pending) {
       if (v)
         this.map.set(k, v);
       else
         this.map.delete(k);
     }
 
-    this.batch.length = 0;
+    this.pending.length = 0;
+  }
+
+  batch() {
+    return this;
+  }
+
+  clear() {
+    this.pending.length = 0;
   }
 }
 

@@ -9,6 +9,7 @@ const crypto = require('crypto');
 const blake2b = require('bcrypto/lib/blake2b');
 const DB = require('./util/db');
 const Merklix = require('../merklix');
+const {Proof} = Merklix;
 
 const FOO1 = blake2b.digest(Buffer.from('foo1'));
 const FOO2 = blake2b.digest(Buffer.from('foo2'));
@@ -25,9 +26,12 @@ function random(min, max) {
   return Math.floor(Math.random() * (max - min)) + min;
 }
 
-async function runTest() {
-  const db = new DB();
-  const tree = new Merklix(db);
+async function runTest(db) {
+  const tree = new Merklix(db, blake2b);
+
+  await db.open();
+
+  let b = null;
 
   // Insert some values.
   await tree.insert(FOO1, BAR1);
@@ -35,8 +39,9 @@ async function runTest() {
   await tree.insert(FOO3, BAR3);
 
   // Commit and get first non-empty root.
-  const first = tree.commit(db);
-  db.flush();
+  b = db.batch();
+  const first = tree.commit(b);
+  await b.write();
   assert.strictEqual(first.length, 32);
 
   // Get a committed value.
@@ -48,8 +53,9 @@ async function runTest() {
   // Get second root with new committed value.
   // Ensure it is different from the first!
   {
-    const root = tree.commit(db);
-    db.flush();
+    b = db.batch();
+    const root = tree.commit(b);
+    await b.write();
     assert.strictEqual(root.length, 32);
     assert.notBufferEqual(root, first);
   }
@@ -67,9 +73,10 @@ async function runTest() {
 
   // Commit removal and ensure our root hash
   // has reverted to what it was before (first).
-  //assert.bufferEqual(tree.commit(db), first);
-  tree.commit(db);
-  db.flush();
+  b = db.batch();
+  // assert.bufferEqual(tree.commit(b), first);
+  tree.commit(b);
+  await b.write();
 
   // Make sure removed value is gone.
   assert.strictEqual(await tree.get(FOO4), null);
@@ -80,6 +87,7 @@ async function runTest() {
   // Create a proof and verify.
   {
     const proof = await tree.prove(first, FOO2);
+    assert.deepStrictEqual(Proof.decode(proof.encode()), proof);
     const [code, data] = tree.verify(first, FOO2, proof);
     assert.strictEqual(code, 0);
     assert.bufferEqual(data, BAR2);
@@ -88,6 +96,7 @@ async function runTest() {
   // Create a non-existent proof and verify.
   {
     const proof = await tree.prove(first, FOO5);
+    assert.deepStrictEqual(Proof.decode(proof.encode()), proof);
     const [code, data] = tree.verify(first, FOO5, proof);
     assert.strictEqual(code, 0);
     assert.strictEqual(data, null);
@@ -96,6 +105,7 @@ async function runTest() {
   // Create a non-existent proof and verify.
   {
     const proof = await tree.prove(first, FOO4);
+    assert.deepStrictEqual(Proof.decode(proof.encode()), proof);
     const [code, data] = tree.verify(first, FOO4, proof);
     assert.strictEqual(code, 0);
     assert.strictEqual(data, null);
@@ -104,6 +114,7 @@ async function runTest() {
   // Create a proof and verify.
   {
     const proof = await tree.prove(FOO2);
+    assert.deepStrictEqual(Proof.decode(proof.encode()), proof);
     const [code, data] = tree.verify(tree.root, FOO2, proof);
     assert.strictEqual(code, 0);
     assert.bufferEqual(data, BAR2);
@@ -112,6 +123,7 @@ async function runTest() {
   // Create a non-existent proof and verify.
   {
     const proof = await tree.prove(FOO5);
+    assert.deepStrictEqual(Proof.decode(proof.encode()), proof);
     const [code, data] = tree.verify(tree.root, FOO5, proof);
     assert.strictEqual(code, 0);
     assert.strictEqual(data, null);
@@ -120,6 +132,7 @@ async function runTest() {
   // Create a proof and verify.
   {
     const proof = await tree.prove(FOO4);
+    assert.deepStrictEqual(Proof.decode(proof.encode()), proof);
     const [code, data] = tree.verify(tree.root, FOO4, proof);
     assert.strictEqual(code, 0);
     assert.strictEqual(data, null);
@@ -127,8 +140,9 @@ async function runTest() {
 
   // Test persistence.
   {
-    const root = tree.commit(db);
-    db.flush();
+    b = db.batch();
+    const root = tree.commit(b);
+    await b.write();
 
     await tree.close();
     await tree.open(root);
@@ -139,8 +153,9 @@ async function runTest() {
 
   // Test persistence of best state.
   {
-    const root = tree.commit(db);
-    db.flush();
+    b = db.batch();
+    const root = tree.commit(b);
+    await b.write();
 
     await tree.close();
     await tree.open();
@@ -150,13 +165,18 @@ async function runTest() {
     // Make sure older values are still there.
     assert.bufferEqual(await tree.get(FOO2), BAR2);
   }
+
+  await db.close();
 }
 
-async function pummel() {
-  const db = new DB();
-  const tree = new Merklix(db);
+async function pummel(db) {
+  const tree = new Merklix(db, blake2b);
   const items = [];
   const set = new Set();
+
+  await db.open();
+
+  let b = null;
 
   while (set.size < 10000) {
     const key = crypto.randomBytes(32);
@@ -186,8 +206,9 @@ async function pummel() {
     for (const [key, value] of items)
       await tree.insert(key, value);
 
-    const root = tree.commit(db);
-    db.flush();
+    b = db.batch();
+    const root = tree.commit(b);
+    await b.write();
 
     for (const [key, value] of items) {
       assert.bufferEqual(await tree.get(key), value);
@@ -217,8 +238,9 @@ async function pummel() {
   }
 
   {
-    const root = tree.commit(db);
-    db.flush();
+    b = db.batch();
+    const root = tree.commit(b);
+    await b.write();
 
     await tree.close();
     await tree.open();
@@ -236,8 +258,9 @@ async function pummel() {
   }
 
   {
-    const root = tree.commit(db);
-    db.flush();
+    b = db.batch();
+    const root = tree.commit(b);
+    await b.write();
 
     await tree.close();
     await tree.open();
@@ -259,16 +282,18 @@ async function pummel() {
     else
       assert.bufferEqual(data, value);
   }
+
+  await db.close();
 }
 
 describe('Merklix', function() {
   this.timeout(5000);
 
   it('should test tree', async () => {
-    await runTest();
+    await runTest(new DB());
   });
 
   it('should pummel tree', async () => {
-    await pummel();
+    await pummel(new DB());
   });
 });

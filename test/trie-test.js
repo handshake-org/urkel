@@ -47,9 +47,12 @@ function compare(k1, k2) {
   return 0;
 }
 
-async function runTest(Trie, secure) {
-  const db = new DB();
+async function runTest(Trie, secure, db) {
   const trie = new Trie(db);
+
+  await db.open();
+
+  let b = null;
 
   // Insert some values.
   await trie.insert(FOO1, BAR1);
@@ -57,8 +60,9 @@ async function runTest(Trie, secure) {
   await trie.insert(FOO3, BAR3);
 
   // Commit and get first non-empty root.
-  const first = trie.commit(db);
-  db.flush();
+  b = db.batch();
+  const first = trie.commit(b);
+  await b.write();
   assert.strictEqual(first.length, 32);
 
   // Get a committed value.
@@ -70,8 +74,9 @@ async function runTest(Trie, secure) {
   // Get second root with new committed value.
   // Ensure it is different from the first!
   {
-    const root = trie.commit(db);
-    db.flush();
+    b = db.batch();
+    const root = trie.commit(b);
+    await b.write();
     assert.strictEqual(root.length, 32);
     assert.notBufferEqual(root, first);
   }
@@ -89,8 +94,9 @@ async function runTest(Trie, secure) {
 
   // Commit removal and ensure our root hash
   // has reverted to what it was before (first).
-  assert.bufferEqual(trie.commit(db), first);
-  db.flush();
+  b = db.batch();
+  assert.bufferEqual(trie.commit(b), first);
+  await b.write();
 
   // Make sure removed value is gone.
   assert.strictEqual(await trie.get(FOO4), null);
@@ -143,8 +149,9 @@ async function runTest(Trie, secure) {
 
   // Test persistence.
   {
-    const root = trie.commit(db);
-    db.flush();
+    b = db.batch();
+    const root = trie.commit(b);
+    await b.write();
 
     await trie.close();
     await trie.open(root);
@@ -155,8 +162,9 @@ async function runTest(Trie, secure) {
 
   // Test persistence of best state.
   {
-    const root = trie.commit(db);
-    db.flush();
+    b = db.batch();
+    const root = trie.commit(b);
+    await b.write();
 
     await trie.close();
     await trie.open();
@@ -183,13 +191,18 @@ async function runTest(Trie, secure) {
       [trie.hashKey(FOO3), BAR3]
     ]);
   }
+
+  await db.close();
 }
 
-async function pummel(Trie, secure) {
-  const db = new DB();
+async function pummel(Trie, secure, db) {
   const trie = new Trie(db);
   const items = [];
   const set = new Set();
+
+  await db.open();
+
+  let b = null;
 
   while (set.size < 10000) {
     const key = crypto.randomBytes(random(1, 100));
@@ -219,8 +232,9 @@ async function pummel(Trie, secure) {
     for (const [key, value] of items)
       await trie.insert(key, value);
 
-    const root = trie.commit(db);
-    db.flush();
+    b = db.batch();
+    const root = trie.commit(b);
+    await b.write();
 
     for (const [key, value] of items) {
       assert.bufferEqual(await trie.get(key), value);
@@ -250,8 +264,9 @@ async function pummel(Trie, secure) {
   }
 
   {
-    const root = trie.commit(db);
-    db.flush();
+    b = db.batch();
+    const root = trie.commit(b);
+    await b.write();
 
     await trie.close();
     await trie.open();
@@ -269,8 +284,9 @@ async function pummel(Trie, secure) {
   }
 
   {
-    const root = trie.commit(db);
-    db.flush();
+    b = db.batch();
+    const root = trie.commit(b);
+    await b.write();
 
     await trie.close();
     await trie.open();
@@ -366,22 +382,24 @@ async function pummel(Trie, secure) {
     else
       assert.bufferEqual(data, value);
   }
+
+  await db.close();
 }
 
 describe('Trie', function() {
   it('should test trie', async () => {
-    await runTest(Trie, false);
+    await runTest(Trie, false, new DB());
   });
 
   it('should pummel trie', async () => {
-    await pummel(Trie, false);
+    await pummel(Trie, false, new DB());
   });
 
   it('should test secure trie', async () => {
-    await runTest(SecureTrie, true);
+    await runTest(SecureTrie, true, new DB());
   });
 
   it('should pummel secure trie', async () => {
-    await pummel(SecureTrie, true);
+    await pummel(SecureTrie, true, new DB());
   });
 });
