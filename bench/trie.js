@@ -5,6 +5,8 @@
 const assert = require('assert');
 const crypto = require('crypto');
 const DB = require('../test/util/db');
+// const {sha256} = require('../test/util/util');
+const sha256 = require('bcrypto/lib/sha256');
 const Trie = require('../lib/trie');
 const SecureTrie = require('../lib/securetrie');
 const {wait, logMemory, createDB} = require('./util');
@@ -15,8 +17,8 @@ const INTERVAL = +process.argv[5] || 88;
 const RATE = Math.floor(BLOCKS / 20);
 const TOTAL = BLOCKS * PER_BLOCK;
 
-async function stress(Trie, db) {
-  const trie = new Trie(db, 4);
+async function stress(Trie, db, pruneMode) {
+  const trie = new Trie(sha256, db, 4, pruneMode);
   const pairs = [];
   const keys = [];
 
@@ -31,7 +33,7 @@ async function stress(Trie, db) {
     let last = null;
 
     for (let j = 0; j < PER_BLOCK; j++) {
-      const key = crypto.randomBytes(32);
+      const key = crypto.randomBytes(trie.hash.size);
       const value = crypto.randomBytes(300);
 
       pairs.push([key, value]);
@@ -99,14 +101,14 @@ async function stress(Trie, db) {
 }
 
 async function bench(Trie, secure, db) {
-  const trie = new Trie(db);
+  const trie = new Trie(sha256, db);
   const items = [];
 
   await db.open();
 
   for (let i = 0; i < 100000; i++) {
     const r = Math.random() > 0.5;
-    const key = crypto.randomBytes(r ? 32 : 7);
+    const key = crypto.randomBytes(r ? trie.hash.size : 7);
     const value = crypto.randomBytes(r ? 100 : 1);
 
     items.push([key, value]);
@@ -198,7 +200,7 @@ async function bench(Trie, secure, db) {
   }
 
   {
-    const root = trie.hash();
+    const root = trie.rootHash();
 
     const [key] = items[items.length - 100];
 
@@ -217,14 +219,14 @@ async function bench(Trie, secure, db) {
 (async () => {
   if (process.argv[2] === 'bdb') {
     console.log('Stress testing with BDB...');
-    await stress(Trie, createDB());
+    await stress(Trie, createDB(), 1);
     setInterval(() => {}, 1000);
     return;
   }
 
   if (process.argv[2] === 'stress') {
     console.log('Stress testing...');
-    await stress(Trie, new DB(true));
+    await stress(Trie, new DB(true), 0);
     return;
   }
 

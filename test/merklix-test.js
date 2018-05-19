@@ -6,16 +6,16 @@
 
 const assert = require('./util/assert');
 const crypto = require('crypto');
-const blake2b = require('bcrypto/lib/blake2b');
 const DB = require('./util/db');
+const {sha256} = require('./util/util');
 const Merklix = require('../lib/merklix');
 const {Proof} = Merklix;
 
-const FOO1 = blake2b.digest(Buffer.from('foo1'));
-const FOO2 = blake2b.digest(Buffer.from('foo2'));
-const FOO3 = blake2b.digest(Buffer.from('foo3'));
-const FOO4 = blake2b.digest(Buffer.from('foo4'));
-const FOO5 = blake2b.digest(Buffer.from('foo5'));
+const FOO1 = sha256.digest(Buffer.from('foo1'));
+const FOO2 = sha256.digest(Buffer.from('foo2'));
+const FOO3 = sha256.digest(Buffer.from('foo3'));
+const FOO4 = sha256.digest(Buffer.from('foo4'));
+const FOO5 = sha256.digest(Buffer.from('foo5'));
 
 const BAR1 = Buffer.from('bar1');
 const BAR2 = Buffer.from('bar2');
@@ -27,7 +27,7 @@ function random(min, max) {
 }
 
 async function runTest(db) {
-  const tree = new Merklix(db, blake2b);
+  const tree = new Merklix(sha256, db);
 
   await db.open();
 
@@ -42,7 +42,7 @@ async function runTest(db) {
   b = db.batch();
   const first = tree.commit(b);
   await b.write();
-  assert.strictEqual(first.length, 32);
+  assert.strictEqual(first.length, tree.hash.size);
 
   // Get a committed value.
   assert.bufferEqual(await tree.get(FOO2), BAR2);
@@ -56,7 +56,7 @@ async function runTest(db) {
     b = db.batch();
     const root = tree.commit(b);
     await b.write();
-    assert.strictEqual(root.length, 32);
+    assert.strictEqual(root.length, tree.hash.size);
     assert.notBufferEqual(root, first);
   }
 
@@ -66,7 +66,7 @@ async function runTest(db) {
   // Make sure we can snapshot the old root.
   const ss = tree.snapshot(first);
   assert.strictEqual(await ss.get(FOO4), null);
-  assert.bufferEqual(ss.hash(), first);
+  assert.bufferEqual(ss.rootHash(), first);
 
   // Remove the last value.
   await tree.remove(FOO4);
@@ -87,7 +87,7 @@ async function runTest(db) {
   // Create a proof and verify.
   {
     const proof = await tree.prove(first, FOO2);
-    assert.deepStrictEqual(Proof.decode(proof.encode()), proof);
+    assert.deepStrictEqual(Proof.decode(proof.encode(), tree.hash.size), proof);
     const [code, data] = tree.verify(first, FOO2, proof);
     assert.strictEqual(code, 0);
     assert.bufferEqual(data, BAR2);
@@ -96,7 +96,7 @@ async function runTest(db) {
   // Create a non-existent proof and verify.
   {
     const proof = await tree.prove(first, FOO5);
-    assert.deepStrictEqual(Proof.decode(proof.encode()), proof);
+    assert.deepStrictEqual(Proof.decode(proof.encode(), tree.hash.size), proof);
     const [code, data] = tree.verify(first, FOO5, proof);
     assert.strictEqual(code, 0);
     assert.strictEqual(data, null);
@@ -105,7 +105,7 @@ async function runTest(db) {
   // Create a non-existent proof and verify.
   {
     const proof = await tree.prove(first, FOO4);
-    assert.deepStrictEqual(Proof.decode(proof.encode()), proof);
+    assert.deepStrictEqual(Proof.decode(proof.encode(), tree.hash.size), proof);
     const [code, data] = tree.verify(first, FOO4, proof);
     assert.strictEqual(code, 0);
     assert.strictEqual(data, null);
@@ -114,7 +114,7 @@ async function runTest(db) {
   // Create a proof and verify.
   {
     const proof = await tree.prove(FOO2);
-    assert.deepStrictEqual(Proof.decode(proof.encode()), proof);
+    assert.deepStrictEqual(Proof.decode(proof.encode(), tree.hash.size), proof);
     const [code, data] = tree.verify(tree.root, FOO2, proof);
     assert.strictEqual(code, 0);
     assert.bufferEqual(data, BAR2);
@@ -123,7 +123,7 @@ async function runTest(db) {
   // Create a non-existent proof and verify.
   {
     const proof = await tree.prove(FOO5);
-    assert.deepStrictEqual(Proof.decode(proof.encode()), proof);
+    assert.deepStrictEqual(Proof.decode(proof.encode(), tree.hash.size), proof);
     const [code, data] = tree.verify(tree.root, FOO5, proof);
     assert.strictEqual(code, 0);
     assert.strictEqual(data, null);
@@ -132,7 +132,7 @@ async function runTest(db) {
   // Create a proof and verify.
   {
     const proof = await tree.prove(FOO4);
-    assert.deepStrictEqual(Proof.decode(proof.encode()), proof);
+    assert.deepStrictEqual(Proof.decode(proof.encode(), tree.hash.size), proof);
     const [code, data] = tree.verify(tree.root, FOO4, proof);
     assert.strictEqual(code, 0);
     assert.strictEqual(data, null);
@@ -160,7 +160,7 @@ async function runTest(db) {
     await tree.close();
     await tree.open();
 
-    assert.bufferEqual(tree.hash(), root);
+    assert.bufferEqual(tree.rootHash(), root);
 
     // Make sure older values are still there.
     assert.bufferEqual(await tree.get(FOO2), BAR2);
@@ -170,7 +170,7 @@ async function runTest(db) {
 }
 
 async function pummel(db) {
-  const tree = new Merklix(db, blake2b);
+  const tree = new Merklix(sha256, db);
   const items = [];
   const set = new Set();
 
@@ -179,7 +179,7 @@ async function pummel(db) {
   let b = null;
 
   while (set.size < 10000) {
-    const key = crypto.randomBytes(32);
+    const key = crypto.randomBytes(tree.hash.size);
     const value = crypto.randomBytes(random(1, 100));
     const hex = key.toString('hex');
 
@@ -221,7 +221,7 @@ async function pummel(db) {
     await tree.close();
     await tree.open();
 
-    assert.bufferEqual(tree.hash(), root);
+    assert.bufferEqual(tree.rootHash(), root);
   }
 
   for (const [key, value] of items) {
@@ -245,7 +245,7 @@ async function pummel(db) {
     await tree.close();
     await tree.open();
 
-    assert.bufferEqual(tree.hash(), root);
+    assert.bufferEqual(tree.rootHash(), root);
   }
 
   for (const [i, [key, value]] of items.entries()) {
@@ -265,13 +265,13 @@ async function pummel(db) {
     await tree.close();
     await tree.open();
 
-    assert.bufferEqual(tree.hash(), root);
+    assert.bufferEqual(tree.rootHash(), root);
   }
 
   for (let i = 0; i < items.length; i += 11) {
     const [key, value] = items[i];
 
-    const root = tree.hash();
+    const root = tree.rootHash();
     const proof = await tree.prove(key);
     const [code, data] = tree.verify(root, key, proof);
 

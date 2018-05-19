@@ -12,7 +12,7 @@ const assert = require('assert');
  */
 
 async function benchMerklix(rounds, roundSize) {
-  const random = require('bcrypto/lib/random');
+  const crypto = require('crypto');
   const Merklix = require('./merklix');
   const tree = new Merklix();
 
@@ -22,7 +22,7 @@ async function benchMerklix(rounds, roundSize) {
     const kv = [];
 
     for (let i = 0; i < roundSize; i++)
-      kv.push([random.randomBytes(32), random.randomBytes(32)]);
+      kv.push([crypto.randomBytes(32), crypto.randomBytes(32)]);
 
     console.log('Merklix Round %d (%d+%d items)', i, i * roundSize, roundSize);
 
@@ -32,7 +32,7 @@ async function benchMerklix(rounds, roundSize) {
     console.log('  Insertion: %dms', Date.now() - now);
 
     {
-      const key = random.randomBytes(32);
+      const key = crypto.randomBytes(32);
       now = Date.now();
       const proof = await tree.prove(tree.root, key);
       console.log('  Non-membership Proof: %dms', Date.now() - now);
@@ -64,20 +64,24 @@ async function benchMerklix(rounds, roundSize) {
 }
 
 async function benchTrie(rounds, roundSize) {
-  const sha256 = require('bcrypto/lib/sha256');
-  const random = require('bcrypto/lib/random');
+  const {sha256} = require('../../test/util/util');
+  const crypto = require('crypto');
   const DB = require('../../test/util/db');
   const Trie = require('../../lib/trie');
   const db = new DB(true);
-  const trie = new Trie(db);
+  const trie = new Trie(trie, db);
 
   let now;
 
   for (let i = 0; i < rounds; i++) {
     const pairs = [];
 
-    for (let i = 0; i < roundSize; i++)
-      pairs.push([random.randomBytes(32), random.randomBytes(32)]);
+    for (let i = 0; i < roundSize; i++) {
+      pairs.push([
+        crypto.randomBytes(trie.hash.size),
+        crypto.randomBytes(trie.hash.size)
+      ]);
+    }
 
     console.log('Trie Round %d (%d+%d items)', i, i * roundSize, roundSize);
 
@@ -87,12 +91,12 @@ async function benchTrie(rounds, roundSize) {
       await trie.insert(key, value);
 
     trie.commit(db);
-    db.flush();
+    db.write();
 
     console.log('  Insertion: %dms', Date.now() - now);
 
     now = Date.now();
-    const root = trie.hash('hex');
+    const root = trie.rootHash('hex');
     console.log('  Root Hash: %dms', Date.now() - now);
 
     assert.strictEqual(root, trie.originalRoot.toString('hex'));
@@ -102,7 +106,7 @@ async function benchTrie(rounds, roundSize) {
       now = Date.now();
       const proof = await trie.prove(key);
       console.log('  Non-membership Proof: %dms', Date.now() - now);
-      const [code, data] = trie.verify(trie.hash(), key, proof);
+      const [code, data] = trie.verify(trie.rootHash(), key, proof);
       assert(code === 0);
       assert(data === null);
     }
@@ -112,7 +116,7 @@ async function benchTrie(rounds, roundSize) {
       now = Date.now();
       const proof = await trie.prove(key);
       console.log('  Membership Proof: %dms', Date.now() - now);
-      const [code, data] = trie.verify(trie.hash(), key, proof);
+      const [code, data] = trie.verify(trie.rootHash(), key, proof);
       assert(code === 0);
       assert(data !== null);
       let size = 0;

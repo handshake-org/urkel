@@ -12,7 +12,7 @@ const assert = require('assert');
  */
 
 async function benchSMT(rounds, roundSize) {
-  const random = require('bcrypto/lib/random');
+  const crypto = require('crypto');
   const SMT = require('./smt');
   const smt = new SMT();
 
@@ -24,7 +24,7 @@ async function benchSMT(rounds, roundSize) {
     const keys = [];
 
     for (let i = 0; i < roundSize; i++)
-      keys.push(random.randomBytes(smt.bytes));
+      keys.push(crypto.randomBytes(smt.bytes));
 
     for (const key of keys)
       db.push(key);
@@ -65,20 +65,24 @@ async function benchSMT(rounds, roundSize) {
 }
 
 async function benchTrie(rounds, roundSize) {
-  const sha256 = require('bcrypto/lib/sha256');
-  const random = require('bcrypto/lib/random');
+  const {sha256} = require('../../test/util/util');
+  const crypto = require('crypto');
   const DB = require('../../test/util/db');
   const Trie = require('../../lib/trie');
   const db = new DB();
-  const trie = new Trie(db);
+  const trie = new Trie(sha256, db);
 
   let now;
 
   for (let i = 0; i < rounds; i++) {
     const pairs = [];
 
-    for (let i = 0; i < roundSize; i++)
-      pairs.push([random.randomBytes(32), random.randomBytes(32)]);
+    for (let i = 0; i < roundSize; i++) {
+      pairs.push([
+        crypto.randomBytes(trie.hash.size),
+        crypto.randomBytes(trie.hash.size)
+      ]);
+    }
 
     console.log('Trie Round %d (%d+%d items)', i, i * roundSize, roundSize);
 
@@ -88,12 +92,12 @@ async function benchTrie(rounds, roundSize) {
       await trie.insert(key, value);
 
     trie.commit(db);
-    db.flush();
+    db.write();
 
     console.log('  Insertion: %dms', Date.now() - now);
 
     now = Date.now();
-    const root = trie.hash('hex');
+    const root = trie.rootHash('hex');
     console.log('  Root Hash: %dms', Date.now() - now);
 
     assert.strictEqual(root, trie.originalRoot.toString('hex'));
@@ -103,7 +107,7 @@ async function benchTrie(rounds, roundSize) {
       now = Date.now();
       const proof = await trie.prove(key);
       console.log('  Non-membership Proof: %dms', Date.now() - now);
-      const [code, data] = trie.verify(trie.hash(), key, proof);
+      const [code, data] = trie.verify(trie.rootHash(), key, proof);
       assert(code === 0);
       assert(data === null);
     }
@@ -113,7 +117,7 @@ async function benchTrie(rounds, roundSize) {
       now = Date.now();
       const proof = await trie.prove(key);
       console.log('  Membership Proof: %dms', Date.now() - now);
-      const [code, data] = trie.verify(trie.hash(), key, proof);
+      const [code, data] = trie.verify(trie.rootHash(), key, proof);
       assert(code === 0);
       assert(data !== null);
     }

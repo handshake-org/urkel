@@ -7,6 +7,7 @@
 const assert = require('./util/assert');
 const crypto = require('crypto');
 const DB = require('./util/db');
+const {sha256} = require('./util/util');
 const Trie = require('../lib/trie');
 const SecureTrie = require('../lib/securetrie');
 
@@ -48,7 +49,7 @@ function compare(k1, k2) {
 }
 
 async function runTest(Trie, secure, db) {
-  const trie = new Trie(db);
+  const trie = new Trie(sha256, db);
 
   await db.open();
 
@@ -63,7 +64,7 @@ async function runTest(Trie, secure, db) {
   b = db.batch();
   const first = trie.commit(b);
   await b.write();
-  assert.strictEqual(first.length, 32);
+  assert.strictEqual(first.length, trie.hash.size);
 
   // Get a committed value.
   assert.bufferEqual(await trie.get(FOO2), BAR2);
@@ -77,7 +78,7 @@ async function runTest(Trie, secure, db) {
     b = db.batch();
     const root = trie.commit(b);
     await b.write();
-    assert.strictEqual(root.length, 32);
+    assert.strictEqual(root.length, trie.hash.size);
     assert.notBufferEqual(root, first);
   }
 
@@ -87,7 +88,7 @@ async function runTest(Trie, secure, db) {
   // Make sure we can snapshot the old root.
   const ss = trie.snapshot(first);
   assert.strictEqual(await ss.get(FOO4), null);
-  assert.bufferEqual(ss.hash(), first);
+  assert.bufferEqual(ss.rootHash(), first);
 
   // Remove the last value.
   await trie.remove(FOO4);
@@ -140,9 +141,9 @@ async function runTest(Trie, secure, db) {
       // Order is different for secure trie due to
       // the fact that the keys are actually hashes.
       assert.deepStrictEqual(items, [
-        [FOO1, BAR1],
         [FOO2, BAR2],
-        [FOO3, BAR3]
+        [FOO3, BAR3],
+        [FOO1, BAR1]
       ]);
     }
   }
@@ -169,7 +170,7 @@ async function runTest(Trie, secure, db) {
     await trie.close();
     await trie.open();
 
-    assert.bufferEqual(trie.hash(), root);
+    assert.bufferEqual(trie.rootHash(), root);
 
     // Make sure older values are still there.
     assert.bufferEqual(await trie.get(FOO2), BAR2);
@@ -186,9 +187,9 @@ async function runTest(Trie, secure, db) {
     }
 
     assert.deepStrictEqual(items, [
-      [trie.hashKey(FOO1), BAR1],
       [trie.hashKey(FOO2), BAR2],
-      [trie.hashKey(FOO3), BAR3]
+      [trie.hashKey(FOO3), BAR3],
+      [trie.hashKey(FOO1), BAR1]
     ]);
   }
 
@@ -196,7 +197,7 @@ async function runTest(Trie, secure, db) {
 }
 
 async function pummel(Trie, secure, db) {
-  const trie = new Trie(db);
+  const trie = new Trie(sha256, db);
   const items = [];
   const set = new Set();
 
@@ -247,7 +248,7 @@ async function pummel(Trie, secure, db) {
     await trie.close();
     await trie.open();
 
-    assert.bufferEqual(trie.hash(), root);
+    assert.bufferEqual(trie.rootHash(), root);
   }
 
   for (const [key, value] of items) {
@@ -271,7 +272,7 @@ async function pummel(Trie, secure, db) {
     await trie.close();
     await trie.open();
 
-    assert.bufferEqual(trie.hash(), root);
+    assert.bufferEqual(trie.rootHash(), root);
   }
 
   for (const [i, [key, value]] of items.entries()) {
@@ -291,7 +292,7 @@ async function pummel(Trie, secure, db) {
     await trie.close();
     await trie.open();
 
-    assert.bufferEqual(trie.hash(), root);
+    assert.bufferEqual(trie.rootHash(), root);
   }
 
   {
@@ -371,7 +372,7 @@ async function pummel(Trie, secure, db) {
   for (let i = 0; i < items.length; i += 11) {
     const [key, value] = items[i];
 
-    const root = trie.hash();
+    const root = trie.rootHash();
     const proof = await trie.prove(key);
     const [code, data] = trie.verify(root, key, proof);
 

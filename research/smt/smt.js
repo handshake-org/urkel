@@ -17,7 +17,7 @@
 'use strict';
 
 const assert = require('assert');
-const sha256 = require('bcrypto/lib/sha256');
+const {sha256} = require('../../test/util/util');
 
 /*
  * Constants

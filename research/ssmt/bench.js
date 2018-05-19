@@ -12,13 +12,13 @@ const assert = require('assert');
  */
 
 async function benchSSMT() {
-  const random = require('bcrypto/lib/random');
+  const crypto = require('crypto');
   const SSMT = require('./ssmt');
   const smt = new SSMT();
   const kv = [];
 
   for (let i = 0; i < 5000; i++)
-    kv.push([random.randomBytes(32), random.randomBytes(32)]);
+    kv.push([crypto.randomBytes(32), crypto.randomBytes(32)]);
 
   let now = Date.now();
 
