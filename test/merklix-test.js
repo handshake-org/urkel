@@ -8,7 +8,7 @@ const assert = require('./util/assert');
 const crypto = require('crypto');
 const blake2b = require('bcrypto/lib/blake2b');
 const DB = require('./util/db');
-const Merklix = require('../merklix');
+const Merklix = require('../lib/merklix');
 const {Proof} = Merklix;
 
 const FOO1 = blake2b.digest(Buffer.from('foo1'));

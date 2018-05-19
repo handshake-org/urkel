@@ -6,7 +6,7 @@ const assert = require('assert');
 const crypto = require('crypto');
 const blake2b = require('bcrypto/lib/blake2b');
 const DB = require('../test/util/db');
-const Merklix = require('../merklix');
+const Merklix = require('../lib/merklix');
 const {wait, logMemory, createDB} = require('./util');
 
 const BLOCKS = +process.argv[3] || 10000;
