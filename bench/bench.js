@@ -8,9 +8,12 @@ const bdb = require('bdb');
 const DB = require('../test/util/db');
 const Trie = require('../lib/trie');
 const SecureTrie = require('../lib/securetrie');
+const Merklix = require('../merklix');
 
 const BLOCKS = 10000;
-const PER_BLOCK = 50;
+const PER_BLOCK = 500;
+// const BLOCKS = 100;
+// const PER_BLOCK = 50;
 const RATE = Math.floor(BLOCKS / 20);
 const TOTAL = BLOCKS * PER_BLOCK;
 const INTERVAL = 88;
@@ -53,6 +56,87 @@ function logMemory() {
 
 function wait() {
   return new Promise((r) => setTimeout(r, 1000));
+}
+
+async function stress3(Merklix) {
+  await db.open();
+
+  const tree = new Merklix(db);
+  const pairs = [];
+  const keys = [];
+
+  console.log(
+    'Committing %d values to tree at a rate of %d per block.',
+    TOTAL,
+    PER_BLOCK);
+
+  for (let i = 0; i < BLOCKS; i++) {
+    let last = null;
+
+    for (let j = 0; j < PER_BLOCK; j++) {
+      const key = crypto.randomBytes(32);
+      const value = crypto.randomBytes(300);
+
+      pairs.push([key, value]);
+
+      last = key;
+    }
+
+    const now = Date.now();
+
+    for (const [key, value] of pairs)
+      await tree.insert(key, value);
+
+    const b = db.batch();
+    tree.commit(b);
+    await b.write();
+    tree.inject();
+
+    pairs.length = 0;
+
+    console.log('Insertion: %d', Date.now() - now);
+
+    if (typeof gc === 'function')
+      gc();
+
+    logMemory();
+
+    if ((i % RATE) === 0) {
+      keys.push(last);
+      console.log(i * PER_BLOCK);
+    }
+
+    if ((i % INTERVAL) === 0) {
+      console.log('waiting');
+      console.log('keys %d', i * PER_BLOCK);
+      await wait();
+    }
+  }
+
+  console.log('Total Items: %d.', TOTAL);
+  console.log('Blocks: %d.', BLOCKS);
+  console.log('Items Per Block: %d.', PER_BLOCK);
+
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i];
+    const now = Date.now();
+    const proof = await tree.prove(key);
+
+    console.log('Proof %d time: %d.', i, Date.now() - now);
+
+    assert(tree.verify(tree.root, key, proof));
+
+    let size = 32 + 2 + 0 + 2;
+    for (const node of proof.nodes)
+      size += node.length;
+
+    size += proof.value.length;
+
+    console.log('Proof %d length: %d', i, proof.nodes.length);
+    console.log('Proof %d size: %d', i, size);
+  }
+
+  setInterval(() => {}, 1000);
 }
 
 async function stress2(Trie) {
@@ -113,8 +197,6 @@ async function stress2(Trie) {
   console.log('Total Items: %d.', TOTAL);
   console.log('Blocks: %d.', BLOCKS);
   console.log('Items Per Block: %d.', PER_BLOCK);
-  //console.log('DB Records: %d.', db.items);
-  //console.log('DB Size: %dmb.', db.size >>> 20);
 
   for (let i = 0; i < keys.length; i++) {
     const key = keys[i];
@@ -318,8 +400,12 @@ async function bench(Trie, secure) {
 (async () => {
   console.log('Running Trie bench...');
 
+  await stress3(Merklix);
+  return;
+
   await stress2(Trie);
   return;
+
   await stress(Trie);
   await bench(Trie, false);
 

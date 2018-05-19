@@ -19,6 +19,7 @@
     "clean": "rm -f btrie.js",
     "lint": "eslint lib/ test/ || exit 0",
     "test": "mocha --reporter spec test/*-test.js",
+    "test-file": "mocha --reporter spec",
     "webpack": "webpack --config webpack.config.js"
   },
   "dependencies": {
