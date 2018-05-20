@@ -219,7 +219,7 @@ async function bench(Trie, secure, db) {
 (async () => {
   if (process.argv[2] === 'bdb') {
     console.log('Stress testing with BDB...');
-    await stress(Trie, createDB(), 1);
+    await stress(Trie, createDB(), 0);
     setInterval(() => {}, 1000);
     return;
   }
