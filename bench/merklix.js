@@ -16,8 +16,8 @@ const INTERVAL = +process.argv[5] || 88;
 const RATE = Math.floor(BLOCKS / 20);
 const TOTAL = BLOCKS * PER_BLOCK;
 
-async function stress(db, pruneMode) {
-  const tree = new Merklix(sha256, db, null, pruneMode);
+async function stress(db, prune) {
+  const tree = new Merklix(sha256, db, null, prune);
   const pairs = [];
   const keys = [];
 
@@ -106,8 +106,8 @@ async function stress(db, pruneMode) {
   await db.close();
 }
 
-async function bench(db) {
-  const tree = new Merklix(sha256, db);
+async function bench(db, prune) {
+  const tree = new Merklix(sha256, db, null, prune);
   const items = [];
 
   await db.open();
@@ -214,19 +214,19 @@ async function bench(db) {
 (async () => {
   if (process.argv[2] === 'bdb') {
     console.log('Stress testing with BDB...');
-    await stress(createDB(), 1);
+    await stress(createDB(), false);
     setInterval(() => {}, 1000);
     return;
   }
 
   if (process.argv[2] === 'stress') {
     console.log('Stress testing...');
-    await stress(new DB(true), 0);
+    await stress(new DB(true), false);
     return;
   }
 
   console.log('Running Merklix bench...');
-  await bench(new DB());
+  await bench(new DB(), false);
 })().catch((err) => {
   console.error(err.stack);
   process.exit(1);

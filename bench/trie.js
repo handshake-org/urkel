@@ -17,8 +17,8 @@ const INTERVAL = +process.argv[5] || 88;
 const RATE = Math.floor(BLOCKS / 20);
 const TOTAL = BLOCKS * PER_BLOCK;
 
-async function stress(Trie, db, pruneMode) {
-  const trie = new Trie(sha256, db, 4, pruneMode);
+async function stress(Trie, db) {
+  const trie = new Trie(sha256, db, 4);
   const pairs = [];
   const keys = [];
 
@@ -219,14 +219,14 @@ async function bench(Trie, secure, db) {
 (async () => {
   if (process.argv[2] === 'bdb') {
     console.log('Stress testing with BDB...');
-    await stress(Trie, createDB(), 0);
+    await stress(Trie, createDB());
     setInterval(() => {}, 1000);
     return;
   }
 
   if (process.argv[2] === 'stress') {
     console.log('Stress testing...');
-    await stress(Trie, new DB(true), 0);
+    await stress(Trie, new DB(true));
     return;
   }
 
