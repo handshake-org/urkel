@@ -54,9 +54,6 @@ async function stress(db, prune) {
 
       console.log('Insertion: %d', Date.now() - now);
 
-      if (typeof gc === 'function')
-        gc();
-
       logMemory();
     }
 
