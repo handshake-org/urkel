@@ -17,7 +17,7 @@
   "scripts": {
     "browserify": "browserify -s btrie lib/btrie.js | uglifyjs -c > btrie.js",
     "clean": "rm -f btrie.js",
-    "lint": "eslint lib/ test/ || exit 0",
+    "lint": "eslint lib/ research/ bench/ test/ || exit 0",
     "test": "mocha --reporter spec test/*-test.js",
     "test-file": "mocha --reporter spec",
     "webpack": "webpack --config webpack.config.js"

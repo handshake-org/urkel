@@ -1,4 +1,5 @@
 /* eslint no-unused-vars: "off" */
+/* eslint no-implicit-coercion: "off" */
 
 'use strict';
 

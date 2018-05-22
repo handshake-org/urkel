@@ -30,15 +30,18 @@ function _logMemory(prefix) {
 }
 
 function logMemory() {
+  const gc = global.gc;
+
   if (typeof gc === 'function') {
     _logMemory('Pre-GC');
     gc();
   }
+
   _logMemory('Memory');
 }
 
 function wait() {
-  return new Promise((r) => setTimeout(r, 1000));
+  return new Promise(r => setTimeout(r, 1000));
 }
 
 function createDB(cacheSize, compression) {

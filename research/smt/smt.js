@@ -14,6 +14,8 @@
  *   https://github.com/google/trillian/blob/master/merkle/sparse_merkle_tree.go
  */
 
+/* eslint no-use-before-define: "off" */
+
 'use strict';
 
 const assert = require('assert');

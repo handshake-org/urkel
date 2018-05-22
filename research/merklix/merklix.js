@@ -7,6 +7,8 @@
  *   https://www.deadalnix.me/2016/09/29/using-merklix-tree-to-checkpoint-an-utxo-set/
  */
 
+/* eslint no-use-before-define: "off" */
+
 'use strict';
 
 const assert = require('assert');
@@ -1176,6 +1178,9 @@ function hashLeaf(ctx, key, value) {
   ctx.update(value);
   return ctx.final();
 }
+
+// Make eslint happy.
+Cache;
 
 /*
  * Expose
