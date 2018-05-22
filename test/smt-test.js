@@ -8,7 +8,7 @@ const assert = require('./util/assert');
 const crypto = require('crypto');
 const DB = require('./util/db');
 const {sha256} = require('./util/util');
-const SMT = require('../lib/smt');
+const SMT = require('../research/smt');
 const {Proof} = SMT;
 
 const FOO1 = sha256.digest(Buffer.from('foo1'));

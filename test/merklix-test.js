@@ -8,7 +8,7 @@ const assert = require('./util/assert');
 const crypto = require('crypto');
 const DB = require('./util/db');
 const {sha256} = require('./util/util');
-const Merklix = require('../lib/merklix');
+const Merklix = require('../research/merklix');
 const {Proof} = Merklix;
 
 const FOO1 = sha256.digest(Buffer.from('foo1'));

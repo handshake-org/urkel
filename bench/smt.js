@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const DB = require('../test/util/db');
 // const {sha256} = require('../test/util/util');
 const sha256 = require('bcrypto/lib/sha256');
-const SMT = require('../lib/smt');
+const SMT = require('../research/smt');
 const {wait, logMemory, createDB} = require('./util');
 
 const BLOCKS = +process.argv[3] || 10000;
