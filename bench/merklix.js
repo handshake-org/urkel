@@ -17,7 +17,7 @@ const RATE = Math.floor(BLOCKS / 20);
 const TOTAL = BLOCKS * PER_BLOCK;
 
 async function stress(db, prune) {
-  const tree = new Merklix(sha256, db, null, prune);
+  const tree = new Merklix(sha256, 160, db, null, prune);
   const pairs = [];
   const keys = [];
 
@@ -32,7 +32,7 @@ async function stress(db, prune) {
     let last = null;
 
     for (let j = 0; j < PER_BLOCK; j++) {
-      const key = crypto.randomBytes(tree.hash.size);
+      const key = crypto.randomBytes(tree.bits >>> 3);
       const value = crypto.randomBytes(300);
 
       pairs.push([key, value]);
@@ -97,21 +97,22 @@ async function stress(db, prune) {
 
     console.log('Proof %d length: %d', i, proof.nodes.length);
     console.log('Proof %d size: %d', i, size);
-    console.log('Proof %d compressed size: %d', i, proof.getSize());
+    console.log('Proof %d compressed size: %d',
+      i, proof.getSize(tree.hash.size, tree.bits));
   }
 
   await db.close();
 }
 
 async function bench(db, prune) {
-  const tree = new Merklix(sha256, db, null, prune);
+  const tree = new Merklix(sha256, 160, db, null, prune);
   const items = [];
 
   await db.open();
 
   for (let i = 0; i < 100000; i++) {
     const r = Math.random() > 0.5;
-    const key = crypto.randomBytes(tree.hash.size);
+    const key = crypto.randomBytes(tree.bits >>> 3);
     const value = crypto.randomBytes(r ? 100 : 1);
 
     items.push([key, value]);

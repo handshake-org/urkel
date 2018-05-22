@@ -26,8 +26,13 @@ function random(min, max) {
   return Math.floor(Math.random() * (max - min)) + min;
 }
 
+function reencode(tree, proof) {
+  const raw = proof.encode(tree.hash.size, tree.bits);
+  return Proof.decode(raw, tree.hash.size, tree.bits);
+}
+
 async function runTest(db) {
-  const tree = new Merklix(sha256, db);
+  const tree = new Merklix(sha256, 256, db);
 
   await db.open();
 
@@ -87,7 +92,7 @@ async function runTest(db) {
   // Create a proof and verify.
   {
     const proof = await tree.prove(first, FOO2);
-    assert.deepStrictEqual(Proof.decode(proof.encode(), tree.hash.size), proof);
+    assert.deepStrictEqual(reencode(tree, proof), proof);
     const [code, data] = tree.verify(first, FOO2, proof);
     assert.strictEqual(code, 0);
     assert.bufferEqual(data, BAR2);
@@ -96,7 +101,7 @@ async function runTest(db) {
   // Create a non-existent proof and verify.
   {
     const proof = await tree.prove(first, FOO5);
-    assert.deepStrictEqual(Proof.decode(proof.encode(), tree.hash.size), proof);
+    assert.deepStrictEqual(reencode(tree, proof), proof);
     const [code, data] = tree.verify(first, FOO5, proof);
     assert.strictEqual(code, 0);
     assert.strictEqual(data, null);
@@ -105,7 +110,7 @@ async function runTest(db) {
   // Create a non-existent proof and verify.
   {
     const proof = await tree.prove(first, FOO4);
-    assert.deepStrictEqual(Proof.decode(proof.encode(), tree.hash.size), proof);
+    assert.deepStrictEqual(reencode(tree, proof), proof);
     const [code, data] = tree.verify(first, FOO4, proof);
     assert.strictEqual(code, 0);
     assert.strictEqual(data, null);
@@ -114,7 +119,7 @@ async function runTest(db) {
   // Create a proof and verify.
   {
     const proof = await tree.prove(FOO2);
-    assert.deepStrictEqual(Proof.decode(proof.encode(), tree.hash.size), proof);
+    assert.deepStrictEqual(reencode(tree, proof), proof);
     const [code, data] = tree.verify(tree.root, FOO2, proof);
     assert.strictEqual(code, 0);
     assert.bufferEqual(data, BAR2);
@@ -123,7 +128,7 @@ async function runTest(db) {
   // Create a non-existent proof and verify.
   {
     const proof = await tree.prove(FOO5);
-    assert.deepStrictEqual(Proof.decode(proof.encode(), tree.hash.size), proof);
+    assert.deepStrictEqual(reencode(tree, proof), proof);
     const [code, data] = tree.verify(tree.root, FOO5, proof);
     assert.strictEqual(code, 0);
     assert.strictEqual(data, null);
@@ -132,7 +137,7 @@ async function runTest(db) {
   // Create a proof and verify.
   {
     const proof = await tree.prove(FOO4);
-    assert.deepStrictEqual(Proof.decode(proof.encode(), tree.hash.size), proof);
+    assert.deepStrictEqual(reencode(tree, proof), proof);
     const [code, data] = tree.verify(tree.root, FOO4, proof);
     assert.strictEqual(code, 0);
     assert.strictEqual(data, null);
@@ -170,7 +175,7 @@ async function runTest(db) {
 }
 
 async function pummel(db) {
-  const tree = new Merklix(sha256, db);
+  const tree = new Merklix(sha256, 256, db);
   const items = [];
   const set = new Set();
 
@@ -179,7 +184,7 @@ async function pummel(db) {
   let b = null;
 
   while (set.size < 10000) {
-    const key = crypto.randomBytes(tree.hash.size);
+    const key = crypto.randomBytes(tree.bits >>> 3);
     const value = crypto.randomBytes(random(1, 100));
     const hex = key.toString('hex');
 

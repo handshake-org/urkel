@@ -41,13 +41,20 @@ function wait() {
   return new Promise((r) => setTimeout(r, 1000));
 }
 
-function createDB() {
+function createDB(cacheSize, compression) {
+  if (cacheSize == null)
+    cacheSize = 8 << 20;
+
+  if (compression == null)
+    compression = true;
+
   const bdb = require('bdb');
+
   return bdb.create({
     location: __dirname + '/benchdb',
     memory: false,
-    compression: true,
-    cacheSize: 8 << 20,
+    compression,
+    cacheSize,
     createIfMissing: true,
     errorIfExists: true
   });

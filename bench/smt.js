@@ -17,7 +17,7 @@ const RATE = Math.floor(BLOCKS / 20);
 const TOTAL = BLOCKS * PER_BLOCK;
 
 async function stress(db) {
-  const tree = new SMT(sha256, db);
+  const smt = new SMT(sha256, 160, db);
   const pairs = [];
   const keys = [];
 
@@ -32,7 +32,7 @@ async function stress(db) {
     let last = null;
 
     for (let j = 0; j < PER_BLOCK; j++) {
-      const key = crypto.randomBytes(tree.bits);
+      const key = crypto.randomBytes(smt.bits >>> 3);
       const value = crypto.randomBytes(300);
 
       pairs.push([key, value]);
@@ -40,14 +40,15 @@ async function stress(db) {
       last = key;
     }
 
-    if ((i % INTERVAL) === 0) {
+    if (i && (i % INTERVAL) === 0) {
       const now = Date.now();
+      const q = smt.queue();
 
       for (const [key, value] of pairs)
-        tree.insert(key, value);
+        q.put(key, value);
 
       const b = db.batch();
-      await tree.commit(b);
+      await q.commit(b);
       await b.write();
 
       pairs.length = 0;
@@ -81,7 +82,7 @@ async function stress(db) {
   for (let i = 0; i < keys.length; i++) {
     const key = keys[i];
     const now = Date.now();
-    const proof = await tree.prove(key);
+    const proof = await smt.prove(key);
 
     console.log('Proof %d time: %d.', i, Date.now() - now);
 
@@ -94,21 +95,22 @@ async function stress(db) {
 
     console.log('Proof %d length: %d', i, proof.nodes.length);
     console.log('Proof %d size: %d', i, size);
-    //console.log('Proof %d compressed size: %d', i, proof.getSize());
+    console.log('Proof %d compressed size: %d',
+      i, proof.getSize(smt.hash, smt.bits));
   }
 
   await db.close();
 }
 
 async function bench(db) {
-  const tree = new SMT(sha256, db);
+  const smt = new SMT(sha256, 160, db);
   const items = [];
 
   await db.open();
 
   for (let i = 0; i < 100000; i++) {
     const r = Math.random() > 0.5;
-    const key = crypto.randomBytes(tree.bits / 8);
+    const key = crypto.randomBytes(smt.bits >>> 3);
     const value = crypto.randomBytes(r ? 100 : 1);
 
     items.push([key, value]);
@@ -118,7 +120,7 @@ async function bench(db) {
     const now = Date.now();
 
     for (const [key, value] of items)
-      tree.insert(key, value);
+      smt.insert(key, value);
 
     console.log('Insert: %d.', Date.now() - now);
   }
@@ -127,7 +129,7 @@ async function bench(db) {
     const now = Date.now();
 
     for (const [key] of items)
-      await tree.get(key);
+      await smt.get(key);
 
     console.log('Get (cached): %d.', Date.now() - now);
   }
@@ -136,20 +138,20 @@ async function bench(db) {
     const now = Date.now();
 
     const b = db.batch();
-    await tree.commit(b);
+    await smt.commit(b);
     await b.write();
 
     console.log('Commit: %d.', Date.now() - now);
   }
 
-  await tree.close();
-  await tree.open();
+  await smt.close();
+  await smt.open();
 
   {
     const now = Date.now();
 
     for (const [key] of items)
-      await tree.get(key);
+      await smt.get(key);
 
     console.log('Get (uncached): %d.', Date.now() - now);
   }
@@ -159,7 +161,7 @@ async function bench(db) {
 
     for (const [i, [key]] of items.entries()) {
       if (i & 1)
-        tree.remove(key);
+        smt.remove(key);
     }
 
     console.log('Remove: %d.', Date.now() - now);
@@ -169,7 +171,7 @@ async function bench(db) {
     const now = Date.now();
 
     const b = db.batch();
-    await tree.commit(b);
+    await smt.commit(b);
     await b.write();
 
     console.log('Commit: %d.', Date.now() - now);
@@ -179,26 +181,26 @@ async function bench(db) {
     const now = Date.now();
 
     const b = db.batch();
-    await tree.commit(b);
+    await smt.commit(b);
     await b.write();
 
     console.log('Commit (nothing): %d.', Date.now() - now);
   }
 
-  await tree.close();
-  await tree.open();
+  await smt.close();
+  await smt.open();
 
   {
-    const root = tree.rootHash();
+    const root = smt.rootHash();
 
     const [key] = items[items.length - 100];
 
     const now1 = Date.now();
-    const proof = await tree.prove(key);
+    const proof = await smt.prove(key);
     console.log('Proof: %d.', Date.now() - now1);
 
     const now2 = Date.now();
-    tree.verify(key, proof);
+    smt.verify(key, proof);
     console.log('Verify: %d.', Date.now() - now2);
   }
 
@@ -208,18 +210,18 @@ async function bench(db) {
 (async () => {
   if (process.argv[2] === 'bdb') {
     console.log('Stress testing with BDB...');
-    await stress(createDB());
+    await stress(createDB(128 << 20, true));
     setInterval(() => {}, 1000);
     return;
   }
 
   if (process.argv[2] === 'stress') {
     console.log('Stress testing...');
-    await stress(new DB(true));
+    await stress(new DB());
     return;
   }
 
-  console.log('Running Merklix bench...');
+  console.log('Running SMT bench...');
   await bench(new DB());
 })().catch((err) => {
   console.error(err.stack);

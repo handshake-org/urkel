@@ -33,7 +33,7 @@ async function stress(Trie, db) {
     let last = null;
 
     for (let j = 0; j < PER_BLOCK; j++) {
-      const key = crypto.randomBytes(trie.hash.size);
+      const key = crypto.randomBytes(20);
       const value = crypto.randomBytes(300);
 
       pairs.push([key, value]);
@@ -54,9 +54,6 @@ async function stress(Trie, db) {
       pairs.length = 0;
 
       console.log('Insertion: %d', Date.now() - now);
-
-      if (typeof gc === 'function')
-        gc();
 
       logMemory();
     }
@@ -108,7 +105,7 @@ async function bench(Trie, secure, db) {
 
   for (let i = 0; i < 100000; i++) {
     const r = Math.random() > 0.5;
-    const key = crypto.randomBytes(r ? trie.hash.size : 7);
+    const key = crypto.randomBytes(r ? 20 : 7);
     const value = crypto.randomBytes(r ? 100 : 1);
 
     items.push([key, value]);
