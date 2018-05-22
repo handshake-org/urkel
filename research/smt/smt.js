@@ -18,7 +18,7 @@
 
 const assert = require('assert');
 const LRU = require('blru');
-const {ensureHash} = require('./common');
+const {ensureHash} = require('../../lib/common');
 
 /*
  * Constants
