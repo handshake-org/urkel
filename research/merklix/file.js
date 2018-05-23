@@ -39,7 +39,6 @@ class File {
     if (this.fd === -1)
       throw new Error('File already closed.');
 
-    await fs.fsync(this.fd);
     await fs.close(this.fd);
 
     this.fd = -1;

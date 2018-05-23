@@ -170,6 +170,7 @@ class FileStore {
 
   async write(data) {
     if (this.current.pos + data.length > MAX_FILE_SIZE) {
+      await this.current.sync();
       await this.closeFile(this.index);
       this.current = await this.openFile(this.index + 1, 'a+');
       this.index += 1;
