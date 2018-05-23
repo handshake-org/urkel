@@ -173,7 +173,8 @@ class Merklix {
 
       const {index, pos} = this.root;
 
-      return new Hash(root, index, pos);
+      if (index !== 0)
+        return new Hash(root, index, pos);
     }
 
     if (!this.db)
@@ -257,7 +258,6 @@ class Merklix {
   async get(key) {
     assert(this.isKey(key));
     const root = await this.getRoot();
-    // const root = await this.ensureRoot();
     return this._get(root, key);
   }
 
