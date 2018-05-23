@@ -47,6 +47,8 @@ async function stress(db, prune) {
     for (const [key, value] of pairs)
       await tree.insert(key, value);
 
+    tree.rootHash();
+
     console.log('Insertion: %d', Date.now() - now);
 
     pairs.length = 0;

@@ -107,7 +107,6 @@
 //
 // And we're back to where we started.
 //
-//
 // Optimizing a merklix tree on disk:
 //
 // Due to the sheer number of nodes, a flat-file store is necessary. The amount
@@ -224,6 +223,7 @@ class Null extends Node {
 }
 
 const NIL = new Null();
+const SLAB = Buffer.allocUnsafe(NODE_SIZE);
 
 class Internal extends Node {
   constructor(left, right) {
@@ -251,7 +251,8 @@ class Internal extends Node {
   }
 
   encode(ctx) {
-    const data = Buffer.allocUnsafe(NODE_SIZE);
+    // const data = Buffer.allocUnsafe(NODE_SIZE);
+    const data = SLAB;
     const left = this.left.hash(ctx);
     const right = this.right.hash(ctx);
 
@@ -336,7 +337,8 @@ class Leaf extends Node {
   }
 
   encode(ctx) {
-    const data = Buffer.allocUnsafe(NODE_SIZE);
+    // const data = Buffer.allocUnsafe(NODE_SIZE);
+    const data = SLAB;
     data[0] = LEAF;
     this.data.copy(data, 1);
     this.key.copy(data, 33);
@@ -469,29 +471,12 @@ class File {
   async sync() {
     return fs.fsync(this.fd);
   }
-
-  async readNode(pos) {
-    const data = await this.read(pos, NODE_SIZE);
-    return decodeNode(data, this.index, pos);
-  }
-
-  async writeNode(node, ctx) {
-    const data = node.encode(ctx);
-    node.index = this.index;
-    node.pos = await this.write(data);
-    return node.pos;
-  }
-
-  async readRoot() {
-    if (this.pos < NODE_SIZE)
-      return NIL;
-    return this.readNode(this.pos - NODE_SIZE);
-  }
 }
 
 class FileStore {
   constructor(prefix) {
     this.prefix = prefix || '/';
+    this.arena = new Arena();
     this.files = [];
     this.current = null;
     this.index = 0;
@@ -600,16 +585,96 @@ class FileStore {
   }
 
   async readNode(index, pos) {
-    const file = await this.openFile(index);
-    return file.readNode(pos);
-  }
-
-  async writeNode(node, ctx) {
-    return this.current.writeNode(node, ctx);
+    const data = await this.read(index, pos, NODE_SIZE);
+    return decodeNode(data, index, pos);
   }
 
   async readRoot() {
-    return this.current.readRoot();
+    if (this.current.pos < NODE_SIZE)
+      return NIL;
+    return this.readNode(this.current.pos - NODE_SIZE);
+  }
+
+  start() {
+    this.arena.offset = this.current.pos;
+    this.arena.index = this.current.index;
+    this.arena.start = 0;
+    this.arena.written = 0;
+    return this;
+  }
+
+  writeNode(node, ctx) {
+    const data = node.encode(ctx);
+    node.pos = this.arena.write(data);
+    node.index = this.arena.index;
+    return node.pos;
+  }
+
+  writeValue(node) {
+    assert(node.type === LEAF);
+    assert(node.index === 0);
+    node.vsize = node.value.length;
+    node.vpos = this.arena.write(node.value);
+    node.vindex = this.arena.index;
+    return node.vpos;
+  }
+
+  async flush() {
+    for (const chunk of this.arena.flush())
+      await this.write(chunk);
+  }
+}
+
+class Arena {
+  constructor() {
+    this.offset = 0;
+    this.index = 0;
+    this.start = 0;
+    this.written = 0;
+    this.data = Buffer.allocUnsafe(0);
+    this.chunks = [];
+  }
+
+  position(written) {
+    return this.offset + (written - this.start);
+  }
+
+  write(data) {
+    if (this.data.length === 0)
+      this.data = Buffer.allocUnsafe(1024);
+
+    while (this.written + data.length > this.data.length) {
+      const buf = Buffer.allocUnsafe(this.data.length * 2);
+      this.data.copy(buf, 0);
+      this.data = buf;
+    }
+
+    if (this.position(this.written) + data.length > MAX_FILE_SIZE) {
+      this.chunks.push(this.render());
+      this.start = this.written;
+      this.offset = 0;
+      this.index += 1;
+    }
+
+    const written = this.written;
+    this.written += data.copy(this.data, this.written);
+
+    return this.position(written);
+  }
+
+  render() {
+    return this.data.slice(this.start, this.written);
+  }
+
+  flush() {
+    const chunks = this.chunks;
+
+    if (this.written > this.start)
+      chunks.push(this.render());
+
+    this.chunks = [];
+
+    return chunks;
   }
 }
 
@@ -617,7 +682,7 @@ class MemoryStore {
   constructor(prefix) {
     this.pos = 0;
     this.index = 0;
-    this.data = Buffer.allocUnsafe(1024);
+    this.data = Buffer.allocUnsafe(0);
   }
 
   async open() {
@@ -641,7 +706,10 @@ class MemoryStore {
     return buf;
   }
 
-  async write(data) {
+  write(data) {
+    if (this.data.length === 0)
+      this.data = Buffer.allocUnsafe(1024);
+
     while (this.pos + data.length > this.data.length) {
       const buf = Buffer.allocUnsafe(this.data.length * 2);
       this.data.copy(buf, 0);
@@ -650,10 +718,6 @@ class MemoryStore {
 
     const pos = this.pos;
     this.pos += data.copy(this.data, this.pos);
-
-    assert(this.pos === pos + data.length);
-    const d = await this.read(0, pos, data.length);
-    assert(d.equals(data));
 
     return pos;
   }
@@ -665,18 +729,33 @@ class MemoryStore {
     return decodeNode(data, index, pos);
   }
 
-  async writeNode(node, ctx) {
-    const data = node.encode(ctx);
-    node.index = 1;
-    node.pos = await this.write(data);
-    return node.pos;
-  }
-
   async readRoot() {
     if (this.pos < NODE_SIZE)
       return NIL;
     return this.readNode(1, this.pos - NODE_SIZE);
   }
+
+  start() {
+    return this;
+  }
+
+  writeNode(node, ctx) {
+    const data = node.encode(ctx);
+    node.pos = this.write(data);
+    node.index = 1;
+    return node.pos;
+  }
+
+  writeValue(node) {
+    assert(node.type === LEAF);
+    assert(node.index === 0);
+    node.vsize = node.value.length;
+    node.vpos = this.write(node.value);
+    node.vindex = 1;
+    return node.vpos;
+  }
+
+  async flush() {}
 }
 
 /**
@@ -1026,7 +1105,11 @@ class Merklix {
   }
 
   async commit(_, enc) {
-    this.root = await this._commit(this.root, this.ctx());
+    this.store.start();
+
+    this.root = this._commit(this.root, this.ctx());
+
+    await this.store.flush();
 
     this.originalRoot = this.rootHash();
 
@@ -1036,7 +1119,7 @@ class Merklix {
     return this.originalRoot;
   }
 
-  async _commit(node, ctx) {
+  _commit(node, ctx) {
     switch (node.type) {
       case NULL: {
         assert(node.index === 0);
@@ -1044,11 +1127,11 @@ class Merklix {
       }
 
       case INTERNAL: {
-        node.left = await this._commit(node.left, ctx);
-        node.right = await this._commit(node.right, ctx);
+        node.left = this._commit(node.left, ctx);
+        node.right = this._commit(node.right, ctx);
 
         if (node.index === 0)
-          await this.store.writeNode(node, ctx);
+          this.store.writeNode(node, ctx);
 
         assert(node.index !== 0);
 
@@ -1063,10 +1146,8 @@ class Merklix {
       case LEAF: {
         if (node.index === 0) {
           assert(node.value);
-          node.vsize = node.value.length;
-          node.vpos = await this.store.write(node.value);
-          node.vindex = this.store.index;
-          await this.store.writeNode(node, ctx);
+          this.store.writeValue(node);
+          this.store.writeNode(node, ctx);
         }
 
         assert(node.index !== 0);
