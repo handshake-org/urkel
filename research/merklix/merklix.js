@@ -386,7 +386,9 @@ class Hash extends Node {
   }
 
   async resolve(store) {
-    return store.readNode(this.index, this.pos);
+    const node = await store.readNode(this.index, this.pos);
+    node.data = this.data;
+    return node;
   }
 
   inspect() {
