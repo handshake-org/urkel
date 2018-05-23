@@ -16,13 +16,14 @@ const PER_BLOCK = +process.argv[4] || 500;
 const INTERVAL = +process.argv[5] || 88;
 const RATE = Math.floor(BLOCKS / 20);
 const TOTAL = BLOCKS * PER_BLOCK;
+const FILE = __dirname + '/merklixdb';
 
 async function stress(db, prune) {
-  const tree = new Merklix(sha256, 160, db, null, prune);
+  const tree = new Merklix(sha256, 160, FILE, 0);
   const pairs = [];
   const keys = [];
 
-  await db.open();
+  await tree.open();
 
   console.log(
     'Committing %d values to tree at a rate of %d per block.',
@@ -41,19 +42,21 @@ async function stress(db, prune) {
       last = key;
     }
 
+    const now = Date.now();
+
+    for (const [key, value] of pairs)
+      await tree.insert(key, value);
+
+    console.log('Insertion: %d', Date.now() - now);
+
+    pairs.length = 0;
+
     if ((i % INTERVAL) === 0) {
       const now = Date.now();
 
-      for (const [key, value] of pairs)
-        await tree.insert(key, value);
+      await tree.commit();
 
-      const b = db.batch();
-      tree.commit(b);
-      await b.write();
-
-      pairs.length = 0;
-
-      console.log('Insertion: %d', Date.now() - now);
+      console.log('Commit: %d', Date.now() - now);
 
       logMemory();
     }
@@ -102,7 +105,7 @@ async function stress(db, prune) {
       i, proof.getSize(tree.hash.size, tree.bits));
   }
 
-  await db.close();
+  await tree.close();
 }
 
 async function bench(db, prune) {
@@ -214,7 +217,7 @@ async function bench(db, prune) {
   if (process.argv[2] === 'bdb') {
     console.log('Stress testing with BDB...');
     await stress(createDB(), false);
-    setInterval(() => {}, 1000);
+    setInterval(() => {}, true);
     return;
   }
 

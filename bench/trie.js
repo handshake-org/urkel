@@ -42,19 +42,23 @@ async function stress(Trie, db) {
       last = key;
     }
 
+    const now = Date.now();
+
+    for (const [key, value] of pairs)
+      await trie.insert(key, value);
+
+    pairs.length = 0;
+
+    console.log('Insertion: %d', Date.now() - now);
+
     if ((i % INTERVAL) === 0) {
       const now = Date.now();
-
-      for (const [key, value] of pairs)
-        await trie.insert(key, value);
 
       const b = db.batch();
       trie.commit(b);
       await b.write();
 
-      pairs.length = 0;
-
-      console.log('Insertion: %d', Date.now() - now);
+      console.log('Commit: %d', Date.now() - now);
 
       logMemory();
     }

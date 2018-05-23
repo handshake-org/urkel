@@ -18,7 +18,7 @@ const RATE = Math.floor(BLOCKS / 20);
 const TOTAL = BLOCKS * PER_BLOCK;
 
 async function stress(db) {
-  const smt = new SMT(sha256, 160, db);
+  const smt = new SMT(sha256, 160, db, 0, 1000000);
   const pairs = [];
   const keys = [];
 

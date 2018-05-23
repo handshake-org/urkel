@@ -75,8 +75,7 @@ async function runTest(db) {
   // Commit removal and ensure our root hash
   // has reverted to what it was before (first).
   b = db.batch();
-  // assert.bufferEqual(smt.commit(b), first);
-  await q.commit(b);
+  assert.bufferEqual(await q.commit(b), first);
   await b.write();
 
   // Make sure removed value is gone.
