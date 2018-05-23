@@ -9,8 +9,8 @@
 'use strict';
 
 const assert = require('assert');
-const common = require('./common');
-const {hashInternal} = common;
+const {hashInternal} = require('./common');
+const {AssertionError} = require('./errors');
 
 /*
  * Constants
@@ -55,7 +55,7 @@ class Node {
   }
 
   write(data, off, ctx, hash, bits) {
-    throw new Error('Unimplemented.');
+    throw new AssertionError('Unimplemented.');
   }
 
   encode(ctx, hash, bits) {
@@ -66,19 +66,19 @@ class Node {
   }
 
   decode(data, hash, bits) {
-    throw new Error('Unimplemented.');
+    throw new AssertionError('Unimplemented.');
   }
 
   async getLeft(store) {
-    throw new Error('Unimplemented.');
+    throw new AssertionError('Unimplemented.');
   }
 
   async getRight(store) {
-    throw new Error('Unimplemented.');
+    throw new AssertionError('Unimplemented.');
   }
 
   async getValue(store) {
-    throw new Error('Unimplemented.');
+    throw new AssertionError('Unimplemented.');
   }
 
   async resolve(store) {
@@ -106,7 +106,7 @@ class Node {
   }
 
   static getSize(hash, bits) {
-    throw new Error('Unimplemented.');
+    throw new AssertionError('Unimplemented.');
   }
 }
 
@@ -213,14 +213,14 @@ class Internal extends Node {
   }
 
   async getLeft(store) {
-    if (this.left.type === HASH)
+    if (this.left.isHash())
       this.left = await this.left.resolve(store);
 
     return this.left;
   }
 
   async getRight(store) {
-    if (this.right.type === HASH)
+    if (this.right.isHash())
       this.right = await this.right.resolve(store);
 
     return this.right;
@@ -379,7 +379,7 @@ function decodeNode(data, hash, bits, index, pos) {
       node = Leaf.decode(data, hash, bits);
       break;
     default:
-      throw new Error('Database corruption.');
+      throw new AssertionError('Database corruption.');
   }
 
   node.index = index;
@@ -394,10 +394,10 @@ function decodeNode(data, hash, bits, index, pos) {
 
 exports.types = types;
 exports.typesByVal = typesByVal;
-exports.NIL = new Null();
 exports.Node = Node;
 exports.Null = Null;
 exports.Internal = Internal;
 exports.Leaf = Leaf;
 exports.Hash = Hash;
+exports.NIL = new Null();
 exports.decodeNode = decodeNode;

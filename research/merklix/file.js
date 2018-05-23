@@ -15,12 +15,16 @@ const fs = require('bfile');
 
 class File {
   constructor(index) {
+    assert((index >>> 0) === index);
     this.index = index;
     this.fd = -1;
     this.pos = 0;
   }
 
   async open(filename, flags) {
+    assert(typeof filename === 'string');
+    assert(typeof flags === 'string');
+
     if (this.fd !== -1)
       throw new Error('File already open.');
 

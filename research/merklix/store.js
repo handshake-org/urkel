@@ -28,17 +28,20 @@ const MAX_FILES = 0xffff;
 
 class FileStore {
   constructor(prefix, hash, bits) {
+    assert(typeof prefix === 'string');
     assert(hash && typeof hash.digest === 'function');
     assert((bits >>> 0) === bits);
     assert(bits > 0 && (bits & 7) === 0);
+
     this.hash = ensureHash(hash);
     this.bits = bits;
     this.nodeSize = Internal.getSize(hash, bits);
-    this.prefix = prefix || '/';
-    this.arena = new Arena();
+    this.prefix = prefix;
+    this.wb = new WriteBuffer();
     this.files = [];
     this.current = null;
     this.index = 0;
+    this.total = 0;
     this.context = null;
   }
 
@@ -97,6 +100,7 @@ class FileStore {
     this.files.length = 0;
     this.current = null;
     this.index = 0;
+    this.total = 0;
   }
 
   async openFile(index, flags) {
@@ -112,6 +116,7 @@ class FileStore {
       await file.open(name, flags);
 
       this.files[index] = file;
+      this.total += 1;
     }
 
     return this.files[index];
@@ -126,12 +131,36 @@ class FileStore {
     await file.close();
 
     this.files[index] = null;
+    this.total -= 1;
   }
 
   async unlinkFile(index) {
     assert(index !== this.index);
     await this.closeFile(index);
     await fs.unlink(this.name(index));
+  }
+
+  async evict() {
+    const files = [];
+
+    for (let i = 0; i < this.files.length; i++) {
+      const file = this.files[i];
+
+      if (!file)
+        continue;
+
+      if (file.index === this.current.index)
+        continue;
+
+      files.push(file.index);
+    }
+
+    if (files.length === 0)
+      return;
+
+    const index = files[Math.random() * files.length | 0];
+
+    return this.closeFile(index);
   }
 
   async read(index, pos, bytes) {
@@ -165,37 +194,32 @@ class FileStore {
   }
 
   start() {
-    this.arena.offset = this.current.pos;
-    this.arena.index = this.current.index;
-    this.arena.start = 0;
-    this.arena.written = 0;
+    this.wb.offset = this.current.pos;
+    this.wb.index = this.current.index;
+    this.wb.start = 0;
+    this.wb.written = 0;
     return this;
   }
 
-  writeNode_(node) {
-    const data = node.encode(this.ctx(), this.hash, this.bits);
-    node.pos = this.arena.write(data);
-    node.index = this.arena.index;
-    return node.pos;
-  }
-
   writeNode(node) {
-    this.arena.expand(this.nodeSize);
+    assert(node.index === 0);
 
-    const written = this.arena.written;
+    this.wb.expand(this.nodeSize);
+
+    const written = this.wb.written;
 
     node.write(
-      this.arena.data,
-      this.arena.written,
+      this.wb.data,
+      this.wb.written,
       this.ctx(),
       this.hash,
       this.bits
     );
 
-    this.arena.written += this.nodeSize;
+    this.wb.written += this.nodeSize;
 
-    node.pos = this.arena.position(written);
-    node.index = this.arena.index;
+    node.pos = this.wb.position(written);
+    node.index = this.wb.index;
 
     return node.pos;
   }
@@ -204,22 +228,22 @@ class FileStore {
     assert(node.isLeaf());
     assert(node.index === 0);
     node.vsize = node.value.length;
-    node.vpos = this.arena.write(node.value);
-    node.vindex = this.arena.index;
+    node.vpos = this.wb.write(node.value);
+    node.vindex = this.wb.index;
     return node.vpos;
   }
 
   async flush() {
-    for (const chunk of this.arena.flush())
+    for (const chunk of this.wb.flush())
       await this.write(chunk);
   }
 }
 
 /**
- * Arena
+ * Write Buffer
  */
 
-class Arena {
+class WriteBuffer {
   constructor() {
     this.offset = 0;
     this.index = 0;
@@ -235,7 +259,7 @@ class Arena {
 
   expand(size) {
     if (this.data.length === 0)
-      this.data = Buffer.allocUnsafe(1024);
+      this.data = Buffer.allocUnsafe(8192);
 
     while (this.written + size > this.data.length) {
       const buf = Buffer.allocUnsafe(this.data.length * 2);
@@ -285,10 +309,11 @@ class MemoryStore {
     assert(hash && typeof hash.digest === 'function');
     assert((bits >>> 0) === bits);
     assert(bits > 0 && (bits & 7) === 0);
+
     this.hash = ensureHash(hash);
     this.bits = bits;
     this.nodeSize = Internal.getSize(hash, bits);
-    this.pos = 0;
+    this.written = 0;
     this.index = 0;
     this.data = Buffer.allocUnsafe(0);
     this.context = null;
@@ -315,24 +340,29 @@ class MemoryStore {
   }
 
   async read(index, pos, bytes) {
-    assert(pos + bytes <= this.pos);
+    assert(pos + bytes <= this.written);
     const buf = Buffer.allocUnsafe(bytes);
     this.data.copy(buf, 0, pos, pos + bytes);
     return buf;
   }
 
-  write(data) {
+  expand(size) {
     if (this.data.length === 0)
-      this.data = Buffer.allocUnsafe(1024);
+      this.data = Buffer.allocUnsafe(8192);
 
-    while (this.pos + data.length > this.data.length) {
+    while (this.written + size > this.data.length) {
       const buf = Buffer.allocUnsafe(this.data.length * 2);
       this.data.copy(buf, 0);
       this.data = buf;
     }
+  }
 
-    const pos = this.pos;
-    this.pos += data.copy(this.data, this.pos);
+  write(data) {
+    this.expand(data.length);
+
+    const pos = this.written;
+
+    this.written += data.copy(this.data, this.written);
 
     return pos;
   }
@@ -345,9 +375,9 @@ class MemoryStore {
   }
 
   async readRoot() {
-    if (this.pos < this.nodeSize)
+    if (this.written < this.nodeSize)
       return NIL;
-    return this.readNode(1, this.pos - this.nodeSize);
+    return this.readNode(1, this.written - this.nodeSize);
   }
 
   start() {
@@ -355,9 +385,25 @@ class MemoryStore {
   }
 
   writeNode(node) {
-    const data = node.encode(this.ctx(), this.hash, this.bits);
-    node.pos = this.write(data);
+    assert(node.index === 0);
+
+    this.expand(this.nodeSize);
+
+    const written = this.written;
+
+    node.write(
+      this.data,
+      this.written,
+      this.ctx(),
+      this.hash,
+      this.bits
+    );
+
+    this.written += this.nodeSize;
+
+    node.pos = written;
     node.index = 1;
+
     return node.pos;
   }
 
@@ -378,5 +424,5 @@ class MemoryStore {
  */
 
 exports.FileStore = FileStore;
-exports.Arena = Arena;
+exports.WriteBuffer = WriteBuffer;
 exports.MemoryStore = MemoryStore;

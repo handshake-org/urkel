@@ -9,9 +9,9 @@
 const assert = require('assert');
 const common = require('./common');
 const {MissingNodeError} = require('./errors');
-const {Node} = require('./nodes');
 
 const {
+  ensureHash,
   hasBit,
   setBit,
   hashInternal,
@@ -19,7 +19,7 @@ const {
 } = common;
 
 /*
- * Error Codes
+ * Constants
  */
 
 const PROOF_OK = 0;
@@ -28,6 +28,53 @@ const PROOF_MALFORMED_NODE = 2;
 const PROOF_UNEXPECTED_NODE = 3;
 const PROOF_EARLY_END = 4;
 const PROOF_NO_RESULT = 5;
+const PROOF_UNKNOWN_ERROR = 6;
+
+/**
+ * Verification error codes.
+ * @enum {Number}
+ */
+
+const codes = {
+  PROOF_OK,
+  PROOF_HASH_MISMATCH,
+  PROOF_MALFORMED_NODE,
+  PROOF_UNEXPECTED_NODE,
+  PROOF_EARLY_END,
+  PROOF_NO_RESULT,
+  PROOF_UNKNOWN_ERROR
+};
+
+/**
+ * Verification error codes (strings).
+ * @const {String[]}
+ * @default
+ */
+
+const codesByVal = [
+  'PROOF_OK',
+  'PROOF_HASH_MISMATCH',
+  'PROOF_MALFORMED_NODE',
+  'PROOF_UNEXPECTED_NODE',
+  'PROOF_EARLY_END',
+  'PROOF_NO_RESULT',
+  'PROOF_UNKNOWN_ERROR'
+];
+
+/**
+ * Get verification error code as a string.
+ * @param {Number} value
+ * @returns {String}
+ */
+
+function code(value) {
+  assert((value & 0xff) === value);
+
+  if (value >= codesByVal.length)
+    value = PROOF_UNKNOWN_ERROR;
+
+  return codesByVal[value];
+}
 
 /*
  * Proofs
@@ -100,6 +147,8 @@ function verify(hash, bits, root, key, proof) {
   assert(root.length === hash.size);
   assert(key.length === (bits >>> 3));
   assert(proof instanceof Proof);
+
+  hash = ensureHash(hash);
 
   const nodes = proof.nodes;
 
@@ -205,20 +254,20 @@ class Proof {
     return this;
   }
 
-  getSize(hashSize, bits) {
-    assert((hashSize >>> 0) === hashSize);
+  getSize(hash, bits) {
+    assert(hash && typeof hash.digest === 'function');
     assert((bits >>> 0) === bits);
     assert(bits > 0 && (bits & 7) === 0);
+
+    hash = ensureHash(hash);
 
     let size = 0;
 
     size += 1;
     size += (this.nodes.length + 7) / 8 | 0;
 
-    const zeroHash = Buffer.alloc(hashSize, 0x00);
-
     for (const node of this.nodes) {
-      if (!node.equals(zeroHash))
+      if (!node.equals(hash.zero))
         size += node.length;
     }
 
@@ -233,33 +282,33 @@ class Proof {
     return size;
   }
 
-  encode(hashSize, bits) {
-    assert((hashSize >>> 0) === hashSize);
-    assert((bits >>> 0) === bits);
-    assert(bits > 0 && (bits & 7) === 0);
+  write(data, off, hash, bits) {
+    assert(Buffer.isBuffer(data));
+    assert((off >>> 0) === off);
 
-    const zeroHash = Buffer.alloc(hashSize, 0x00);
-    const size = this.getSize(hashSize, bits);
+    const size = this.getSize(hash, bits);
     const bsize = (this.nodes.length + 7) / 8 | 0;
-    const data = Buffer.alloc(size);
 
-    let pos = 0;
+    assert(off + size <= data.length);
+
+    let pos = off;
 
     assert(this.nodes.length > 0);
     assert(this.nodes.length <= bits);
+    assert(bits <= 256);
 
     data[pos] = this.nodes.length - 1;
 
     pos += 1;
 
-    // data.fill(0x00, pos, pos + bsize);
+    data.fill(0x00, pos, pos + bsize);
 
     pos += bsize;
 
     for (let i = 0; i < this.nodes.length; i++) {
       const node = this.nodes[i];
 
-      if (node.equals(zeroHash))
+      if (node.equals(hash.zero))
         setBit(data, 8 + i);
       else
         pos += node.copy(data, pos);
@@ -277,10 +326,7 @@ class Proof {
       field |= this.value.length;
     }
 
-    data[pos] = field & 0xff;
-    pos += 1;
-    data[pos] |= field >>> 8;
-    pos += 1;
+    pos = data.writeUInt16LE(field, pos);
 
     if (this.key)
       pos += this.key.copy(data, pos);
@@ -288,18 +334,21 @@ class Proof {
     if (this.value)
       pos += this.value.copy(data, pos);
 
-    assert(pos === data.length);
+    assert((pos - off) === size);
 
-    return data;
+    return pos;
   }
 
-  decode(data, hashSize, bits) {
+  read(data, off, hash, bits) {
     assert(Buffer.isBuffer(data));
-    assert((hashSize >>> 0) === hashSize);
+    assert((off >>> 0) === off);
+    assert(hash && typeof hash.digest === 'function');
     assert((bits >>> 0) === bits);
     assert(bits > 0 && (bits & 7) === 0);
 
-    let pos = 0;
+    hash = ensureHash(hash);
+
+    let pos = off;
 
     assert(pos + 1 <= data.length);
 
@@ -311,52 +360,71 @@ class Proof {
 
     assert(pos <= data.length);
 
-    const zeroHash = Buffer.alloc(hashSize, 0x00);
-
     for (let i = 0; i < count; i++) {
       if (hasBit(data, 8 + i)) {
-        this.nodes.push(zeroHash);
+        this.nodes.push(hash.zero);
       } else {
-        assert(pos + hashSize <= data.length);
-        const hash = data.slice(pos, pos + hashSize);
-        this.nodes.push(hash);
-        pos += hashSize;
+        const h = copy(data, pos, hash.size);
+        this.nodes.push(h);
+        pos += hash.size;
       }
     }
 
     assert(pos + 2 <= data.length);
 
-    let field = 0;
-    field |= data[pos];
-    field |= data[pos + 1] << 8;
+    const field = data.readUInt16LE(pos, true);
     pos += 2;
 
     if (field & (1 << 15)) {
-      const keySize = bits >>> 3;
-      assert(pos + keySize <= data.length);
-      this.key = data.slice(pos, pos + keySize);
-      pos += keySize;
+      const size = bits >>> 3;
+      this.key = copy(data, pos, size);
+      pos += size;
     }
 
     if (field & (1 << 14)) {
       const size = field & ((1 << 14) - 1);
-      assert(pos + size <= data.length);
-      this.value = data.slice(pos, pos + size);
+      this.value = copy(data, pos, size);
       pos += size;
     }
 
+    return pos;
+  }
+
+  encode(hash, bits) {
+    const size = this.getSize(hash, bits);
+    const data = Buffer.allocUnsafe(size);
+    this.write(data, 0, hash, bits);
+    return data;
+  }
+
+  decode(data, hash, bits) {
+    this.read(data, 0, hash, bits);
     return this;
   }
 
-  static decode(data, hashSize, bits) {
-    return new this().decode(data, hashSize, bits);
+  static decode(data, hash, bits) {
+    return new this().decode(data, hash, bits);
   }
+}
+
+/*
+ * Helpers
+ */
+
+function copy(data, pos, size) {
+  assert(pos + size <= data.length);
+  const buf = Buffer.allocUnsafe(size);
+  data.copy(buf, 0, pos, pos + size);
+  return buf;
 }
 
 /*
  * Expose
  */
 
+exports.codes = codes;
+exports.codesByVal = codesByVal;
+exports.code = code;
 exports.prove = prove;
 exports.verify = verify;
 exports.Proof = Proof;

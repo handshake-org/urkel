@@ -6,6 +6,8 @@
 
 'use strict';
 
+const assert = require('assert');
+
 /*
  * Constants
  */
@@ -18,25 +20,18 @@ const EMPTY = Buffer.alloc(0);
  * Common
  */
 
-const zeroHashes = [];
-
-for (let i = 0; i < 64; i++)
-  zeroHashes.push(null);
-
-function zeroHash(size) {
-  if (!zeroHashes[size])
-    zeroHashes[size] = Buffer.alloc(size, 0x00);
-  return zeroHashes[size];
-}
-
 function ensureHash(hash) {
+  assert(hash);
+  assert(typeof hash.name === 'string');
+  assert(typeof hash.digest === 'function');
+
   if (hash.size != null)
     return hash;
 
   hash.id = hash.name.toLowerCase();
   hash.size = hash.digest(EMPTY).length;
   hash.bits = hash.size * 8;
-  hash.zero = zeroHash(hash.size);
+  hash.zero = Buffer.alloc(hash.size, 0x00);
 
   ({ __proto__: hash });
 
@@ -72,6 +67,8 @@ function hashLeaf(ctx, key, value) {
 }
 
 function parseU32(name) {
+  assert(typeof name === 'string');
+
   if (name.length !== 10)
     return -1;
 
@@ -94,6 +91,7 @@ function parseU32(name) {
 }
 
 function readPos(data) {
+  assert(Buffer.isBuffer(data));
   assert(data.length === 6);
   return [
     data.readUInt16LE(0, true),
@@ -102,6 +100,8 @@ function readPos(data) {
 }
 
 function writePos(index, pos) {
+  assert((index & 0xffff) == index);
+  assert((pos >>> 0) === pos);
   const buf = Buffer.allocUnsafe(6);
   buf.writeUInt16LE(index, 0, true);
   buf.writeUInt32LE(pos, 2, true);
@@ -112,7 +112,7 @@ function writePos(index, pos) {
  * Expose
  */
 
-exports.zeroHash = zeroHash;
+exports.EMPTY = EMPTY;
 exports.ensureHash = ensureHash;
 exports.hasBit = hasBit;
 exports.setBit = setBit;

@@ -27,7 +27,8 @@ const {
 } = common;
 
 const {
-  MissingNodeError
+  MissingNodeError,
+  AssertionError
 } = errors;
 
 const {
@@ -35,8 +36,7 @@ const {
   NIL,
   Internal,
   Leaf,
-  Hash,
-  decodeNode
+  Hash
 } = nodes;
 
 const {
@@ -164,8 +164,17 @@ class Merklix {
     if (root.equals(this.hash.zero))
       return NIL;
 
-    if (root.equals(this.originalRoot))
-      return this.root;
+    if (root.equals(this.originalRoot)) {
+      if (this.root.isNull())
+        return NIL;
+
+      if (this.root.isHash())
+        return this.root;
+
+      const {index, pos} = this.root;
+
+      return new Hash(root, index, pos);
+    }
 
     if (!this.db)
       throw new Error('Cannot get history without database.');
@@ -185,15 +194,20 @@ class Merklix {
   }
 
   async getRoot(root) {
+    if (root == null)
+      root = this.originalRoot;
+
     const node = await this.getHistory(root);
+
     if (node.isHash())
-      return await node.resolve(this.store);
+      return node.resolve(this.store);
+
     return node;
   }
 
   async ensureRoot() {
     if (this.root.isHash())
-      this.root = await this.root.resolve(this.store);
+      return this.root.resolve(this.store);
     return this.root;
   }
 
@@ -242,12 +256,8 @@ class Merklix {
 
   async get(key) {
     assert(this.isKey(key));
-
-    let root = this.root;
-
-    if (root.isHash())
-      root = await root.resolve(this.store);
-
+    const root = await this.getRoot();
+    // const root = await this.ensureRoot();
     return this._get(root, key);
   }
 
@@ -476,16 +486,18 @@ class Merklix {
 
     this.store.start();
 
-    this.root = this._commit(this.root, this.ctx());
+    const root = this._commit(this.root, this.ctx());
 
     await this.store.flush();
     await this.store.sync();
 
+    this.root = root;
     this.originalRoot = this.rootHash();
 
     if (batch) {
       assert(this.db);
-      batch.put(this.originalRoot, writePos(this.root.index, this.root.pos));
+      const raw = writePos(root.index, root.pos)
+      batch.put(this.originalRoot, raw);
       batch.put(STATE_KEY, this.originalRoot);
     }
 

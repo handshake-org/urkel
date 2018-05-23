@@ -27,8 +27,8 @@ function random(min, max) {
 }
 
 function reencode(tree, proof) {
-  const raw = proof.encode(tree.hash.size, tree.bits);
-  return Proof.decode(raw, tree.hash.size, tree.bits);
+  const raw = proof.encode(tree.hash, tree.bits);
+  return Proof.decode(raw, tree.hash, tree.bits);
 }
 
 async function runTest(db) {
