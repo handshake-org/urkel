@@ -32,7 +32,7 @@ function reencode(tree, proof) {
 }
 
 async function runTest(db) {
-  const tree = new Merklix(sha256, 160, null, 0);
+  const tree = new Merklix(sha256, 160, null, db, 0);
 
   await db.open();
   await tree.open();
@@ -70,9 +70,9 @@ async function runTest(db) {
   assert.bufferEqual(await tree.get(FOO4), BAR4);
 
   // Make sure we can snapshot the old root.
-  // const ss = tree.snapshot(first);
-  // assert.strictEqual(await ss.get(FOO4), null);
-  // assert.bufferEqual(ss.rootHash(), first);
+  const ss = await tree.snapshot(first);
+  assert.strictEqual(await ss.get(FOO4), null);
+  assert.bufferEqual(ss.rootHash(), first);
 
   // Remove the last value.
   await tree.remove(FOO4);
@@ -80,8 +80,7 @@ async function runTest(db) {
   // Commit removal and ensure our root hash
   // has reverted to what it was before (first).
   b = db.batch();
-  // assert.bufferEqual(tree.commit(b), first);
-  await tree.commit(b);
+  assert.bufferEqual(await tree.commit(b), first);
   await b.write();
 
   // Make sure removed value is gone.
@@ -91,7 +90,6 @@ async function runTest(db) {
   assert.bufferEqual(await tree.get(FOO2), BAR2);
 
   // Create a proof and verify.
-  /*
   {
     const proof = await tree.prove(first, FOO2);
     assert.deepStrictEqual(reencode(tree, proof), proof);
@@ -117,7 +115,6 @@ async function runTest(db) {
     assert.strictEqual(code, 0);
     assert.strictEqual(data, null);
   }
-  */
 
   // Create a proof and verify.
   {
@@ -179,7 +176,7 @@ async function runTest(db) {
 }
 
 async function pummel(db) {
-  const tree = new Merklix(sha256, 160, null, 0);
+  const tree = new Merklix(sha256, 160, null, db, 0);
   const items = [];
   const set = new Set();
 
