@@ -86,7 +86,7 @@ async function prove(tree, root, key) {
   assert(tree.isKey(key));
 
   const nodes = [];
-  const ctx = tree.ctx();
+  const ctx = tree.ctx;
 
   let node = await tree.getRoot(root);
   let depth = 0;
