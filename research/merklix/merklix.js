@@ -97,12 +97,12 @@ class Merklix {
     this.bits = bits;
     this.prefix = prefix || null;
     this.db = db || null;
+    this.ctx = this.hash.hash();
     this.store = new Store(prefix, hash, bits);
     this.originalRoot = this.hash.zero;
     this.root = NIL;
     this.cacheGen = 0;
     this.cacheLimit = limit;
-    this.context = null;
   }
 
   isKey(key) {
@@ -117,18 +117,12 @@ class Merklix {
     return hash.length === this.hash.size;
   }
 
-  ctx() {
-    if (!this.context)
-      this.context = this.hash.hash();
-    return this.context;
-  }
-
   hashInternal(left, right) {
-    return hashInternal(this.ctx(), left, right);
+    return hashInternal(this.ctx, left, right);
   }
 
   hashLeaf(key, value) {
-    return hashLeaf(this.ctx(), key, value);
+    return hashLeaf(this.ctx, key, value);
   }
 
   async open(root) {
@@ -232,7 +226,7 @@ class Merklix {
 
       if (depth === this.bits) {
         throw new MissingNodeError({
-          rootHash: root.hash(this.ctx()),
+          rootHash: root.hash(this.ctx),
           key,
           depth
         });
@@ -311,7 +305,7 @@ class Merklix {
 
       if (depth === this.bits) {
         throw new MissingNodeError({
-          rootHash: root.hash(this.ctx()),
+          rootHash: root.hash(this.ctx),
           key,
           depth
         });
@@ -425,7 +419,7 @@ class Merklix {
 
       if (depth === this.bits) {
         throw new MissingNodeError({
-          rootHash: root.hash(this.ctx()),
+          rootHash: root.hash(this.ctx),
           key,
           depth
         });
@@ -471,8 +465,7 @@ class Merklix {
   }
 
   rootHash(enc) {
-    const ctx = this.ctx();
-    const hash = this.root.hash(ctx);
+    const hash = this.root.hash(this.ctx);
 
     if (enc === 'hex')
       return hash.toString('hex');
@@ -486,7 +479,7 @@ class Merklix {
 
     this.store.start();
 
-    const root = this._commit(this.root, this.ctx());
+    const root = this._commit(this.root);
 
     await this.store.flush();
     await this.store.sync();
@@ -507,7 +500,7 @@ class Merklix {
     return this.originalRoot;
   }
 
-  _commit(node, ctx) {
+  _commit(node) {
     switch (node.type) {
       case NULL: {
         assert(node.index === 0);
@@ -515,8 +508,8 @@ class Merklix {
       }
 
       case INTERNAL: {
-        node.left = this._commit(node.left, ctx);
-        node.right = this._commit(node.right, ctx);
+        node.left = this._commit(node.left);
+        node.right = this._commit(node.right);
 
         if (node.index === 0)
           this.store.writeNode(node);
@@ -524,7 +517,7 @@ class Merklix {
         assert(node.index !== 0);
 
         if (node.gen === this.cacheLimit)
-          return new Hash(node.hash(ctx), node.index, node.pos);
+          return new Hash(node.hash(this.ctx), node.index, node.pos);
 
         node.gen += 1;
 
@@ -540,7 +533,7 @@ class Merklix {
 
         assert(node.index !== 0);
 
-        return new Hash(node.hash(ctx), node.index, node.pos);
+        return new Hash(node.hash(this.ctx), node.index, node.pos);
       }
 
       case HASH: {

@@ -37,18 +37,12 @@ class FileStore {
     this.bits = bits;
     this.nodeSize = Internal.getSize(hash, bits);
     this.prefix = prefix;
+    this.ctx = this.hash.hash();
     this.wb = new WriteBuffer();
     this.files = [];
     this.current = null;
     this.index = 0;
     this.total = 0;
-    this.context = null;
-  }
-
-  ctx() {
-    if (!this.context)
-      this.context = this.hash.hash();
-    return this.context;
   }
 
   name(num) {
@@ -212,7 +206,7 @@ class FileStore {
     node.write(
       this.wb.data,
       this.wb.written,
-      this.ctx(),
+      this.ctx,
       this.hash,
       this.bits
     );
@@ -314,16 +308,10 @@ class MemoryStore {
     this.hash = ensureHash(hash);
     this.bits = bits;
     this.nodeSize = Internal.getSize(hash, bits);
+    this.ctx = this.hash.hash();
     this.written = 0;
     this.index = 0;
     this.data = Buffer.allocUnsafe(0);
-    this.context = null;
-  }
-
-  ctx() {
-    if (!this.context)
-      this.context = this.hash.hash();
-    return this.context;
   }
 
   async open() {
@@ -395,7 +383,7 @@ class MemoryStore {
     node.write(
       this.data,
       this.written,
-      this.ctx(),
+      this.ctx,
       this.hash,
       this.bits
     );
