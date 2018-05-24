@@ -59,7 +59,7 @@ function createDB(cacheSize, compression) {
     compression,
     cacheSize,
     createIfMissing: true,
-    errorIfExists: true
+    errorIfExists: false
   });
 }
 

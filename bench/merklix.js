@@ -71,11 +71,8 @@ async function stress(prefix, db) {
       console.log(i * PER_BLOCK);
     }
 
-    if ((i % 100) === 0) {
-      console.log('waiting');
-      console.log('keys %d', i * PER_BLOCK);
-      await wait();
-    }
+    if ((i % 100) === 0)
+      console.log('Keys: %d', i * PER_BLOCK);
   }
 
   console.log('Total Items: %d.', TOTAL);
@@ -107,7 +104,7 @@ async function stress(prefix, db) {
     console.log('Proof %d length: %d', i, proof.nodes.length);
     console.log('Proof %d size: %d', i, size);
     console.log('Proof %d compressed size: %d',
-      i, proof.getSize(tree.hash.size, tree.bits));
+      i, proof.getSize(tree.hash, tree.bits));
   }
 
   await tree.close();

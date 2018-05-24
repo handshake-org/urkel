@@ -550,8 +550,8 @@ class Merklix {
 
     const {hash, bits, prefix, db, cacheLimit} = this;
     const tree = new this.constructor(hash, bits, prefix, db, cacheLimit);
+
     tree.store = this.store;
-    tree.context = this.context;
 
     return tree.inject(root);
   }
