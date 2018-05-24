@@ -46,22 +46,22 @@ class Node {
     this.pos = 0;
   }
 
-  hash(ctx) {
-    return ctx.constructor.zero;
+  hash(hash) {
+    return hash.zero;
   }
 
   getSize(hash, bits) {
     return this.constructor.getSize(hash, bits);
   }
 
-  write(data, off, ctx, hash, bits) {
+  write(data, off, hash, bits) {
     throw new AssertionError('Unimplemented.');
   }
 
-  encode(ctx, hash, bits) {
+  encode(hash, bits) {
     const size = Internal.getSize(hash, bits);
     const data = Buffer.allocUnsafe(size);
-    this.write(data, 0, ctx, hash, bits);
+    this.write(data, 0, hash, bits);
     return data;
   }
 
@@ -142,20 +142,20 @@ class Internal extends Node {
     this.right = right || exports.NIL;
   }
 
-  hash(ctx) {
+  hash(hash) {
     if (!this.data) {
-      const left = this.left.hash(ctx);
-      const right = this.right.hash(ctx);
+      const left = this.left.hash(hash);
+      const right = this.right.hash(hash);
 
-      this.data = hashInternal(ctx, left, right);
+      this.data = hashInternal(hash, left, right);
     }
 
     return this.data;
   }
 
-  write(data, off, ctx, hash, bits) {
-    const left = this.left.hash(ctx);
-    const right = this.right.hash(ctx);
+  write(data, off, hash, bits) {
+    const left = this.left.hash(hash);
+    const right = this.right.hash(hash);
 
     data[off] = INTERNAL;
     off += 1;
@@ -266,7 +266,7 @@ class Leaf extends Node {
     return this.data;
   }
 
-  write(data, off, ctx, hash, bits) {
+  write(data, off, hash, bits) {
     const leafSize = Leaf.getSize(hash, bits);
     const nodeSize = Internal.getSize(hash, bits);
     const left = nodeSize - leafSize;
@@ -339,14 +339,14 @@ class Leaf extends Node {
  */
 
 class Hash extends Node {
-  constructor(hash, index, pos) {
+  constructor(data, index, pos) {
     super(HASH);
-    this.data = hash || null;
+    this.data = data || null;
     this.index = index || 0;
     this.pos = pos || 0;
   }
 
-  hash(ctx) {
+  hash(hash) {
     assert(this.data);
     return this.data;
   }

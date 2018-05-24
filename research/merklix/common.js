@@ -32,6 +32,7 @@ function ensureHash(hash) {
   hash.size = hash.digest(EMPTY).length;
   hash.bits = hash.size * 8;
   hash.zero = Buffer.alloc(hash.size, 0x00);
+  hash.ctx = hash.hash();
 
   ({ __proto__: hash });
 
@@ -50,7 +51,8 @@ function setBit(key, index) {
   key[oct] |= 1 << (7 - bit);
 }
 
-function hashInternal(ctx, left, right) {
+function hashInternal(hash, left, right) {
+  const ctx = hash.ctx;
   ctx.init();
   ctx.update(INTERNAL_PREFIX);
   ctx.update(left);
@@ -58,7 +60,8 @@ function hashInternal(ctx, left, right) {
   return ctx.final();
 }
 
-function hashLeaf(ctx, key, value) {
+function hashLeaf(hash, key, value) {
+  const ctx = hash.ctx;
   ctx.init();
   ctx.update(LEAF_PREFIX);
   ctx.update(key);
@@ -90,22 +93,53 @@ function parseU32(name) {
   return num;
 }
 
-function readPos(data) {
+function fromRecord(data) {
   assert(Buffer.isBuffer(data));
-  assert(data.length === 6);
+  assert(data.length > 6);
+
+  const size = data.length - 6;
+
   return [
-    data.readUInt16LE(0, true),
-    data.readUInt32LE(2, true)
+    data.slice(0, size),
+    data.readUInt16LE(size, true),
+    data.readUInt32LE(size + 2, true)
   ];
 }
 
-function writePos(index, pos) {
+function toRecord(prev, index, pos) {
+  assert(Buffer.isBuffer(prev));
+  assert(prev.length > 0);
   assert((index & 0xffff) == index);
   assert((pos >>> 0) === pos);
-  const buf = Buffer.allocUnsafe(6);
-  buf.writeUInt16LE(index, 0, true);
-  buf.writeUInt32LE(pos, 2, true);
+
+  const buf = Buffer.allocUnsafe(prev.length + 6);
+  prev.copy(buf, 0);
+
+  buf.writeUInt16LE(index, prev.length, true);
+  buf.writeUInt32LE(pos, prev.length + 2, true);
+
   return buf;
+}
+
+function randomString() {
+  const n = Math.random();
+  const s = n.toString(32);
+  return s.substring(2);
+}
+
+function randomPath(path) {
+  assert(typeof path === 'string');
+
+  while (path.length > 1) {
+    const ch = path[path.length - 1];
+
+    if (ch !== '/' && ch !== '\\')
+      break;
+
+    path = path.slice(0, -1);
+  }
+
+  return `${path}.${randomString()}~`;
 }
 
 /*
@@ -119,5 +153,7 @@ exports.setBit = setBit;
 exports.hashInternal = hashInternal;
 exports.hashLeaf = hashLeaf;
 exports.parseU32 = parseU32;
-exports.readPos = readPos;
-exports.writePos = writePos;
+exports.fromRecord = fromRecord;
+exports.toRecord = toRecord;
+exports.randomString = randomString;
+exports.randomPath = randomPath;

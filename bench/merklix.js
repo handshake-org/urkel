@@ -54,7 +54,7 @@ async function stress(prefix, db) {
 
     pairs.length = 0;
 
-    if ((i % INTERVAL) === 0) {
+    if (i && (i % INTERVAL) === 0) {
       const now = Date.now();
 
       const b = db.batch();
@@ -63,13 +63,29 @@ async function stress(prefix, db) {
 
       console.log('Commit: %d', Date.now() - now);
 
+      await doProof(tree, i, last);
+
       logMemory();
     }
 
-    if ((i % RATE) === 0) {
-      keys.push(last);
-      console.log(i * PER_BLOCK);
+    /*
+    if (i && (i % (INTERVAL * 20)) === 0) {
+      console.log('Compacting...');
+      const before = await tree.store.stat();
+      const now = Date.now();
+      const b = db.batch();
+      await tree.compact(b);
+      await b.write();
+      console.log('Compact: %d', Date.now() - now);
+      const after = await tree.store.stat();
+      console.log('Compacted: %d->%d',
+        (before.size / 1024 / 1024).toFixed(2),
+        (after.size / 1024 / 1024).toFixed(2));
     }
+    */
+
+    if ((i % RATE) === 0)
+      keys.push(last);
 
     if ((i % 100) === 0)
       console.log('Keys: %d', i * PER_BLOCK);
@@ -79,36 +95,35 @@ async function stress(prefix, db) {
   console.log('Blocks: %d.', BLOCKS);
   console.log('Items Per Block: %d.', PER_BLOCK);
 
-  if (db.items != null) {
-    console.log('DB Records: %d.', db.items);
-    console.log('DB Size: %dmb.', db.size >>> 20);
-  }
-
   for (let i = 0; i < keys.length; i++) {
     const key = keys[i];
-    const now = Date.now();
-    const proof = await tree.prove(key);
-
-    console.log('Proof %d time: %d.', i, Date.now() - now);
-
-    let size = 0;
-    for (const node of proof.nodes)
-      size += node.length;
-
-    if (proof.key)
-      size += proof.key.length;
-
-    if (proof.value)
-      size += proof.value.length;
-
-    console.log('Proof %d length: %d', i, proof.nodes.length);
-    console.log('Proof %d size: %d', i, size);
-    console.log('Proof %d compressed size: %d',
-      i, proof.getSize(tree.hash, tree.bits));
+    await doProof(tree, i, key);
   }
 
   await tree.close();
   await db.close();
+}
+
+async function doProof(tree, i, key) {
+  const now = Date.now();
+  const proof = await tree.prove(key);
+
+  console.log('Proof %d time: %d.', i, Date.now() - now);
+
+  let size = 0;
+  for (const node of proof.nodes)
+    size += node.length;
+
+  if (proof.key)
+    size += proof.key.length;
+
+  // if (proof.value)
+  //   size += proof.value.length;
+
+  console.log('Proof %d length: %d', i, proof.nodes.length);
+  console.log('Proof %d size: %d', i, size);
+  console.log('Proof %d compressed size: %d',
+    i, proof.getSize(tree.hash, tree.bits) - 300);
 }
 
 async function bench(prefix, db) {

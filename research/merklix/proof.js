@@ -86,7 +86,6 @@ async function prove(tree, root, key) {
   assert(tree.isKey(key));
 
   const nodes = [];
-  const ctx = tree.ctx;
 
   let node = await tree.getRoot(root);
   let depth = 0;
@@ -97,13 +96,13 @@ async function prove(tree, root, key) {
   for (;;) {
     // Empty (sub)tree.
     if (node.isNull()) {
-      nodes.push(node.hash(ctx));
+      nodes.push(node.hash(tree.hash));
       break;
     }
 
     // Leaf node.
     if (node.isLeaf()) {
-      nodes.push(node.hash(ctx));
+      nodes.push(node.hash(tree.hash));
 
       if (!key.equals(node.key))
         k = node.key;
@@ -115,7 +114,7 @@ async function prove(tree, root, key) {
 
     if (depth === tree.bits) {
       throw new MissingNodeError({
-        rootHash: root.hash(ctx),
+        rootHash: root.hash(tree.hash),
         key,
         depth
       });
@@ -125,10 +124,10 @@ async function prove(tree, root, key) {
 
     // Internal node.
     if (hasBit(key, depth)) {
-      nodes.push(node.left.hash(ctx));
+      nodes.push(node.left.hash(tree.hash));
       node = await node.getRight(tree.store);
     } else {
-      nodes.push(node.right.hash(ctx));
+      nodes.push(node.right.hash(tree.hash));
       node = await node.getLeft(tree.store);
     }
 
@@ -158,7 +157,6 @@ function verify(hash, bits, root, key, proof) {
   if (nodes.length > bits)
     return [PROOF_MALFORMED_NODE, null];
 
-  const ctx = hash.hash();
   const leaf = nodes[nodes.length - 1];
 
   let next = leaf;
@@ -169,9 +167,9 @@ function verify(hash, bits, root, key, proof) {
     const node = nodes[depth];
 
     if (hasBit(key, depth))
-      next = hashInternal(ctx, node, next);
+      next = hashInternal(hash, node, next);
     else
-      next = hashInternal(ctx, next, node);
+      next = hashInternal(hash, next, node);
 
     depth -= 1;
   }
@@ -203,7 +201,7 @@ function verify(hash, bits, root, key, proof) {
     if (proof.key.equals(key))
       return [PROOF_UNEXPECTED_NODE, null];
 
-    const h = hashLeaf(ctx, proof.key, proof.value);
+    const h = hashLeaf(hash, proof.key, proof.value);
 
     if (!h.equals(leaf))
       return [PROOF_HASH_MISMATCH, null];
@@ -215,7 +213,7 @@ function verify(hash, bits, root, key, proof) {
   if (!proof.value)
     return [PROOF_NO_RESULT, null];
 
-  const h = hashLeaf(ctx, key, proof.value);
+  const h = hashLeaf(hash, key, proof.value);
 
   if (!h.equals(leaf))
     return [PROOF_HASH_MISMATCH, null];

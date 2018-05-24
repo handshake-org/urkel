@@ -12,7 +12,7 @@ const fs = require('bfile');
 const common = require('./common');
 const File = require('./file');
 const nodes = require('./nodes');
-const {ensureHash, parseU32} = common;
+const {ensureHash, parseU32, EMPTY} = common;
 const {decodeNode, NIL, Internal} = nodes;
 
 /*
@@ -21,6 +21,7 @@ const {decodeNode, NIL, Internal} = nodes;
 
 const MAX_FILE_SIZE = 0x7fffffff;
 const MAX_FILES = 0xffff;
+const MAX_OPEN_FILES = 64;
 
 /**
  * File Store
@@ -37,7 +38,6 @@ class FileStore {
     this.bits = bits;
     this.nodeSize = Internal.getSize(hash, bits);
     this.prefix = prefix;
-    this.ctx = this.hash.hash();
     this.wb = new WriteBuffer();
     this.files = [];
     this.current = null;
@@ -45,10 +45,10 @@ class FileStore {
     this.total = 0;
   }
 
-  name(num) {
-    assert((num >>> 0) === num);
+  name(index) {
+    assert((index >>> 0) === index);
 
-    let name = num.toString(10);
+    let name = index.toString(10);
 
     while (name.length < 10)
       name = '0' + name;
@@ -57,6 +57,9 @@ class FileStore {
   }
 
   async ensure() {
+    if (this.index !== 0)
+      throw new Error('Store already opened.');
+
     await fs.mkdirp(this.prefix, 0o770);
 
     const list = await fs.readdir(this.prefix);
@@ -65,6 +68,9 @@ class FileStore {
 
     for (const name of list) {
       const num = parseU32(name);
+
+      if (num === -1)
+        continue;
 
       if (num > MAX_FILES)
         continue;
@@ -78,7 +84,7 @@ class FileStore {
 
   async open() {
     if (this.index !== 0)
-      throw new Error('Files already opened.');
+      throw new Error('Store already opened.');
 
     this.index = await this.ensure();
     this.current = await this.openFile(this.index, 'a+');
@@ -86,7 +92,7 @@ class FileStore {
 
   async close() {
     if (this.index === 0)
-      throw new Error('File already closed.');
+      throw new Error('Store already closed.');
 
     for (let i = 0; i < this.files.length; i++)
       await this.closeFile(i);
@@ -97,8 +103,69 @@ class FileStore {
     this.total = 0;
   }
 
+  async stat() {
+    const list = await fs.readdir(this.prefix);
+
+    let files = 0;
+    let size = 0;
+
+    for (const name of list) {
+      const num = parseU32(name);
+
+      if (num === -1)
+        continue;
+
+      if (num > MAX_FILES)
+        continue;
+
+      const file = Path.resolve(this.prefix, name);
+      const stat = await fs.stat(file);
+
+      files += 1;
+      size += stat.size;
+    }
+
+    return {
+      files,
+      size
+    };
+  }
+
+  async destroy() {
+    if (this.index !== 0)
+      throw new Error('Store is opened.');
+
+    const list = await fs.readdir(this.prefix);
+
+    for (const name of list) {
+      const file = Path.resolve(this.prefix, name);
+      await fs.unlink(file);
+    }
+
+    return fs.rmdir(this.prefix);
+  }
+
+  async rename(prefix) {
+    assert(typeof prefix === 'string');
+
+    if (this.index !== 0)
+      throw new Error('Store is opened.');
+
+    await fs.rename(this.prefix, prefix);
+
+    this.prefix = prefix;
+  }
+
   async openFile(index, flags) {
+    assert((index >>> 0) === index);
     assert(index !== 0);
+    assert(typeof flags === 'string');
+
+    if (this.index === 0)
+      throw new Error('Store is closed.');
+
+    // Temporary?
+    assert((index & 0xffff) === index);
 
     while (index >= this.files.length)
       this.files.push(null);
@@ -106,6 +173,9 @@ class FileStore {
     if (!this.files[index]) {
       const file = new File(index);
       const name = this.name(index);
+
+      if (this.total >= MAX_OPEN_FILES)
+        this.evict();
 
       await file.open(name, flags);
 
@@ -117,24 +187,37 @@ class FileStore {
   }
 
   async closeFile(index) {
+    assert((index >>> 0) === index);
+
+    if (this.index === 0)
+      throw new Error('Store is closed.');
+
     const file = this.files[index];
 
     if (!file)
       return;
 
-    await file.close();
-
     this.files[index] = null;
     this.total -= 1;
+
+    await file.close();
   }
 
   async unlinkFile(index) {
+    assert((index >>> 0) === index);
     assert(index !== this.index);
+
+    if (this.index === 0)
+      throw new Error('Store is closed.');
+
     await this.closeFile(index);
     await fs.unlink(this.name(index));
   }
 
-  async evict() {
+  evict() {
+    if (this.index === 0)
+      throw new Error('Store is closed.');
+
     const files = [];
 
     for (let i = 0; i < this.files.length; i++) {
@@ -146,23 +229,70 @@ class FileStore {
       if (file.index === this.current.index)
         continue;
 
-      files.push(file.index);
+      if (file.reads > 0)
+        continue;
+
+      files.push(file);
     }
 
     if (files.length === 0)
       return;
 
-    const index = files[Math.random() * files.length | 0];
+    const i = Math.random() * files.length | 0;
+    const file = files[i];
 
-    return this.closeFile(index);
+    this.files[file.index] = null;
+    this.total -= 1;
+
+    file.closeSync();
   }
 
-  async read(index, pos, bytes) {
+  async read(index, pos, size) {
+    if (this.index === 0)
+      throw new Error('Store is closed.');
+
     const file = await this.openFile(index, 'r');
-    return file.read(pos, bytes);
+    return file.read(pos, size);
+  }
+
+  async prune(max) {
+    for (let i = 0; i < this.files.length; i++) {
+      if (i === this.current.index)
+        continue;
+      await this.closeFile(i);
+    }
+
+    const list = await fs.readdir(this.prefix);
+
+    let index = 1;
+
+    for (const name of list) {
+      const num = parseU32(name);
+
+      if (num === -1)
+        continue;
+
+      if (num > max)
+        continue;
+
+      const file = Path.resolve(this.prefix, name);
+
+      await fs.unlink(file);
+    }
+  }
+
+  async advance() {
+    await this.current.sync();
+    await this.closeFile(this.index);
+    this.current = await this.openFile(this.index + 1, 'a+');
+    this.index += 1;
+    return this.index - 1;
   }
 
   async write(data) {
+    if (this.index === 0)
+      throw new Error('Store is closed.');
+
     if (this.current.pos + data.length > MAX_FILE_SIZE) {
       await this.current.sync();
       await this.closeFile(this.index);
@@ -174,6 +304,9 @@ class FileStore {
   }
 
   async sync() {
+    if (this.index === 0)
+      throw new Error('Store is closed.');
+
     return this.current.sync();
   }
 
@@ -183,8 +316,12 @@ class FileStore {
   }
 
   async readRoot() {
+    if (this.index === 0)
+      throw new Error('Store is closed.');
+
     if (this.current.pos < this.nodeSize)
       return NIL;
+
     return this.readNode(this.current.pos - this.nodeSize);
   }
 
@@ -206,7 +343,6 @@ class FileStore {
     node.write(
       this.wb.data,
       this.wb.written,
-      this.ctx,
       this.hash,
       this.bits
     );
@@ -244,7 +380,7 @@ class WriteBuffer {
     this.index = 0;
     this.start = 0;
     this.written = 0;
-    this.data = Buffer.allocUnsafe(0);
+    this.data = EMPTY;
     this.chunks = [];
   }
 
@@ -308,30 +444,50 @@ class MemoryStore {
     this.hash = ensureHash(hash);
     this.bits = bits;
     this.nodeSize = Internal.getSize(hash, bits);
-    this.ctx = this.hash.hash();
     this.written = 0;
     this.index = 0;
-    this.data = Buffer.allocUnsafe(0);
+    this.data = EMPTY;
   }
 
   async open() {
     if (this.index !== 0)
-      throw new Error('Files already opened.');
+      throw new Error('Store already opened.');
 
     this.index = 1;
   }
 
   async close() {
     if (this.index === 0)
-      throw new Error('File already closed.');
+      throw new Error('Store already closed.');
 
     this.index = 0;
   }
 
+  async stat() {
+    return {
+      files: 1,
+      size: this.written
+    };
+  }
+
+  async destroy() {
+    if (this.index !== 0)
+      throw new Error('Store is opened.');
+  }
+
+  async rename(prefix) {
+    assert(typeof prefix === 'string');
+  }
+
   async read(index, pos, bytes) {
+    if (this.index === 0)
+      throw new Error('Store is closed.');
+
     assert(pos + bytes <= this.written);
+
     const buf = Buffer.allocUnsafe(bytes);
     this.data.copy(buf, 0, pos, pos + bytes);
+
     return buf;
   }
 
@@ -347,6 +503,9 @@ class MemoryStore {
   }
 
   write(data) {
+    if (this.index === 0)
+      throw new Error('Store is closed.');
+
     this.expand(data.length);
 
     const pos = this.written;
@@ -364,8 +523,12 @@ class MemoryStore {
   }
 
   async readRoot() {
+    if (this.index === 0)
+      throw new Error('Store is closed.');
+
     if (this.written < this.nodeSize)
       return NIL;
+
     return this.readNode(1, this.written - this.nodeSize);
   }
 
@@ -383,7 +546,6 @@ class MemoryStore {
     node.write(
       this.data,
       this.written,
-      this.ctx,
       this.hash,
       this.bits
     );

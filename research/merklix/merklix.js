@@ -22,8 +22,9 @@ const {
   hasBit,
   hashLeaf,
   hashInternal,
-  readPos,
-  writePos
+  fromRecord,
+  toRecord,
+  randomPath
 } = common;
 
 const {
@@ -97,7 +98,6 @@ class Merklix {
     this.bits = bits;
     this.prefix = prefix || null;
     this.db = db || null;
-    this.ctx = this.hash.hash();
     this.store = new Store(prefix, hash, bits);
     this.originalRoot = this.hash.zero;
     this.root = NIL;
@@ -118,11 +118,11 @@ class Merklix {
   }
 
   hashInternal(left, right) {
-    return hashInternal(this.ctx, left, right);
+    return hashInternal(this.hash, left, right);
   }
 
   hashLeaf(key, value) {
-    return hashLeaf(this.ctx, key, value);
+    return hashLeaf(this.hash, key, value);
   }
 
   async open(root) {
@@ -149,6 +149,36 @@ class Merklix {
     await this.store.close();
   }
 
+  async getRecord(root) {
+    if (!this.db)
+      throw new Error('Cannot get history without database.');
+
+    const raw = await this.db.get(root);
+
+    if (!raw) {
+      throw new MissingNodeError({
+        rootHash: root,
+        nodeHash: root
+      });
+    }
+
+    if (raw.length !== this.hash.size + 6)
+      throw new AssertionError('Database corruption.');
+
+    return fromRecord(raw);
+  }
+
+  writeRecord(batch, hash, prev, index, pos) {
+    const raw = toRecord(prev, index, pos);
+    batch.put(hash, raw);
+  }
+
+  writeRoot(batch, root, prev) {
+    const hash = root.hash(this.hash);
+    this.writeRecord(batch, hash, prev, root.index, root.pos);
+    batch.put(STATE_KEY, hash);
+  }
+
   async getHistory(root) {
     if (typeof root === 'string')
       root = Buffer.from(root, 'hex');
@@ -171,19 +201,7 @@ class Merklix {
         return new Hash(root, index, pos);
     }
 
-    if (!this.db)
-      throw new Error('Cannot get history without database.');
-
-    const raw = await this.db.get(root);
-
-    if (!raw) {
-      throw new MissingNodeError({
-        rootHash: root,
-        nodeHash: root
-      });
-    }
-
-    const [index, pos] = readPos(raw);
+    const [, index, pos] = await this.getRecord(root);
 
     return new Hash(root, index, pos);
   }
@@ -226,7 +244,7 @@ class Merklix {
 
       if (depth === this.bits) {
         throw new MissingNodeError({
-          rootHash: root.hash(this.ctx),
+          rootHash: root.hash(this.hash),
           key,
           depth
         });
@@ -305,7 +323,7 @@ class Merklix {
 
       if (depth === this.bits) {
         throw new MissingNodeError({
-          rootHash: root.hash(this.ctx),
+          rootHash: root.hash(this.hash),
           key,
           depth
         });
@@ -419,7 +437,7 @@ class Merklix {
 
       if (depth === this.bits) {
         throw new MissingNodeError({
-          rootHash: root.hash(this.ctx),
+          rootHash: root.hash(this.hash),
           key,
           depth
         });
@@ -465,7 +483,7 @@ class Merklix {
   }
 
   rootHash(enc) {
-    const hash = this.root.hash(this.ctx);
+    const hash = this.root.hash(this.hash);
 
     if (enc === 'hex')
       return hash.toString('hex');
@@ -473,9 +491,11 @@ class Merklix {
     return hash;
   }
 
-  async commit(batch, enc) {
+  async commit(batch) {
     if (this.db)
       assert(batch && typeof batch.put === 'function');
+
+    const prev = this.originalRoot;
 
     this.store.start();
 
@@ -485,17 +505,12 @@ class Merklix {
     await this.store.sync();
 
     this.root = root;
-    this.originalRoot = this.rootHash();
+    this.originalRoot = root.hash(this.hash);
 
     if (batch) {
       assert(this.db);
-      const raw = writePos(root.index, root.pos)
-      batch.put(this.originalRoot, raw);
-      batch.put(STATE_KEY, this.originalRoot);
+      this.writeRoot(batch, root, prev);
     }
-
-    if (enc === 'hex')
-      return this.originalRoot.toString('hex');
 
     return this.originalRoot;
   }
@@ -517,7 +532,7 @@ class Merklix {
         assert(node.index !== 0);
 
         if (node.gen === this.cacheLimit)
-          return new Hash(node.hash(this.ctx), node.index, node.pos);
+          return new Hash(node.hash(this.hash), node.index, node.pos);
 
         node.gen += 1;
 
@@ -533,7 +548,7 @@ class Merklix {
 
         assert(node.index !== 0);
 
-        return new Hash(node.hash(this.ctx), node.index, node.pos);
+        return new Hash(node.hash(this.hash), node.index, node.pos);
       }
 
       case HASH: {
@@ -579,6 +594,104 @@ class Merklix {
 
   verify(root, key, proof) {
     return verify(this.hash, this.bits, root, key, proof);
+  }
+
+  async getPrevious(rootHash) {
+    assert(this.isHash(rootHash));
+    const [prev] = await this.getRecord(rootHash);
+    return prev;
+  }
+
+  async getPastRoots(rootHash) {
+    assert(this.isHash(rootHash));
+
+    const roots = [];
+
+    for (;;) {
+      if (rootHash.equals(this.hash.zero))
+        break;
+
+      roots.push(rootHash);
+
+      rootHash = await this.getPrevious(rootHash);
+    }
+
+    return roots.reverse();
+  }
+
+  async compact(batch) {
+    if (this.db)
+      assert(batch && typeof batch.put === 'function');
+
+    const node = await this.getRoot();
+
+    if (node.isNull())
+      return;
+
+    const index = await this.store.advance();
+
+    this.store.start();
+
+    const root = await this._compact(node);
+    assert(root.isHash());
+
+    await this.store.flush();
+    await this.store.sync();
+    await this.store.prune(index);
+
+    if (batch) {
+      assert(this.db);
+
+      const roots = await this.getPastRoots(root.data);
+
+      for (const hash of roots)
+        batch.del(hash);
+
+      this.writeRoot(batch, root, this.hash.zero);
+    }
+
+    this.root = root;
+  }
+
+  async _compact(node) {
+    if (this.store.wb.written > (100 << 20)) {
+      await this.store.flush();
+      this.store.start();
+    }
+
+    switch (node.type) {
+      case NULL: {
+        return node;
+      }
+
+      case INTERNAL: {
+        node.left = await this._compact(node.left);
+        node.right = await this._compact(node.right);
+
+        node.index = 0;
+        node.pos = 0;
+
+        this.store.writeNode(node);
+
+        return new Hash(node.hash(this.hash), node.index, node.pos);
+      }
+
+      case LEAF: {
+        node.index = 0;
+        node.pos = 0;
+        node.value = await node.getValue(this.store);
+        this.store.writeValue(node);
+        this.store.writeNode(node);
+        return new Hash(node.hash(this.hash), node.index, node.pos);
+      }
+
+      case HASH: {
+        const r = await node.resolve(this.store);
+        return this._compact(r);
+      }
+    }
+
+    throw new AssertionError('Unknown node.');
   }
 
   static get proof() {
