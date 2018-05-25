@@ -5,7 +5,38 @@ Optimized [Merklix Tree][1] for node.js.
 ## Usage
 
 ``` js
-const merklix = require('merklix');
+const crypto = require('bcrypto');
+const {Merklix} = require('merklix');
+const {SHA256, randomBytes} = crypto;
+
+const tree = new Merklix(SHA256, 160, '/path/to/my/db');
+
+await tree.open();
+
+let last;
+
+for (let i = 0; i < 500; i++) {
+  const key = randomBytes(20);
+  const value = randomBytes(300);
+  await tree.insert(key, value);
+  last = key;
+}
+
+await tree.commit();
+
+const root = tree.rootHash();
+const proof = await tree.prove(root, last);
+const [code, value] = tree.verify(root, last, proof);
+
+if (code === 0 && value)
+  console.log('Valid proof for: %s', value.toString('hex'));
+
+await tree.values((key, value) => {
+  console.log('Iterated over item:');
+  console.log([key.toString('hex'), value.toString('hex')]);
+});
+
+await tree.close();
 ```
 
 ## Description
