@@ -158,7 +158,8 @@ The actual leaf data is stored at `value_position` in `value_file`.
 This module will store the tree in a series of append-only files. Atomicity
 with a parent database can be achieved by fsyncing every write and inserting
 the best root hash and file position into something like leveldb (once the
-fsync has completed).
+fsync has completed). We use a particularly large write buffer to batch every
+single insert.
 
 ## Contribution and License Agreement
 
