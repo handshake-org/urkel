@@ -34,11 +34,11 @@ Note that we only went right once even though we have 3 extra bits in the key.
 
 This next part is important to how the merklix tree handles key collisions. Say
 we insert leaf `3` (1101). You'll notice it has a three bit collision with leaf
-`2`. In order to maintain a proper key path within the tree, we grow down and
-add "null" nodes (represented by `x`) as children of internal nodes. This is
-basically a sign that there's a dead end in one of the internal nodes. This is
-the trick to keeping the merklix tree small and ever-growing, unlike a sparse
-merkle tree for example.
+`2` (1100). In order to maintain a proper key path within the tree, we grow
+down and add "null" nodes (represented by `x`) as children of internal nodes.
+This is basically a sign that there's a dead end in one of the internal nodes.
+This is the trick to keeping the merklix tree small and ever-growing, unlike a
+sparse merkle tree for example.
 
 ```
        R
@@ -77,18 +77,23 @@ need to send the full preimage to prove that we are a leaf, and that we're also
 a different key that may have a colliding path with whatever key a peer is
 trying to get a proof for. On the other hand, if the key path stops at one of
 the "dead-end" nodes, we do not have to send any preimage! Even better, if
-there are any "dead-end" nodes up the branch when creating a proof, we can
+there are any "dead-end" nodes up the subtree when creating a proof, we can
 compress them since they are redundant zero-hashes.
+
+With 50,000,000 leaves in the tree, the average depth of any given key path
+down the tree should be around 26 or 27 (due the inevitable key prefix
+collisions). This results in a proof size slightly over 800 bytes, pushing a
+1-2ms proof creation time.
 
 ### Removal
 
-Removal is tricky when we have "dead-end" nodes in our branch. We need to
-revert all of the branch growing we just did.
+Removal is tricky when we have "dead-end" nodes in our subtree. We need to
+revert all of the subtree growing we just did.
 
 If we were to remove leaf 4 from the above tree, we _must_ replace it with a
 "dead-end". The general rule is: if the target node's sibling is an internal
 node, replace with a null node. If the sibling is another leaf, attempt to
-ungrow the branch by detecting key collisions.
+ungrow the subtree by detecting key collisions.
 
 Removing leaf 4 (we _must_ replace with a dead-end):
 
@@ -105,7 +110,7 @@ Removing leaf 4 (we _must_ replace with a dead-end):
        2    3
 ```
 
-Removing leaf 3 (ungrow the branch):
+Removing leaf 3 (ungrow the subtree):
 
 ```
        R
@@ -149,6 +154,11 @@ struct {
 ```
 
 The actual leaf data is stored at `value_position` in `value_file`.
+
+This module will store the tree in a series of append-only files. Atomicity
+with a parent database can be achieved by fsyncing every write and inserting
+the best root hash and file position into something like leveldb (once the
+fsync has completed).
 
 ## Contribution and License Agreement
 
