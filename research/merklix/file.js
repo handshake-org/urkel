@@ -7,7 +7,6 @@
 'use strict';
 
 const assert = require('assert');
-const fs = require('bfile');
 const {IOError} = require('./errors');
 
 /**
@@ -15,8 +14,11 @@ const {IOError} = require('./errors');
  */
 
 class File {
-  constructor(index) {
+  constructor(fs, index) {
+    assert(fs);
     assert((index >>> 0) === index);
+
+    this.fs = fs;
     this.index = index;
     this.fd = -1;
     this.pos = 0;
@@ -30,9 +32,9 @@ class File {
     if (this.fd !== -1)
       throw new Error('File already open.');
 
-    this.fd = await fs.open(name, flags, 0o660);
+    this.fd = await this.fs.open(name, flags, 0o660);
 
-    const stat = await fs.fstat(this.fd);
+    const stat = await this.fs.fstat(this.fd);
 
     this.pos = stat.size;
   }
@@ -47,7 +49,7 @@ class File {
     this.pos = 0;
     this.reads = 0;
 
-    return fs.close(fd);
+    return this.fs.close(fd);
   }
 
   closeSync() {
@@ -60,14 +62,14 @@ class File {
     this.pos = 0;
     this.reads = 0;
 
-    fs.closeSync(fd);
+    this.fs.closeSync(fd);
   }
 
   async sync() {
     if (this.fd === -1)
       throw new Error('File already closed.');
 
-    return fs.fsync(this.fd);
+    return this.fs.fsync(this.fd);
   }
 
   async truncate(size) {
@@ -77,7 +79,7 @@ class File {
     if (size === this.pos)
       return undefined;
 
-    return fs.ftruncate(this.fd, size);
+    return this.fs.ftruncate(this.fd, size);
   }
 
   async read(pos, size) {
@@ -91,7 +93,7 @@ class File {
     let r;
 
     try {
-      r = await fs.read(this.fd, buf, 0, size, pos);
+      r = await this.fs.read(this.fd, buf, 0, size, pos);
     } finally {
       this.reads -= 1;
     }
@@ -108,7 +110,7 @@ class File {
 
     const pos = this.pos;
 
-    const w = await fs.write(this.fd, data, 0, data.length, null);
+    const w = await this.fs.write(this.fd, data, 0, data.length, null);
 
     if (w !== data.length)
       throw new IOError('write', this.index, pos, data.length);
@@ -124,7 +126,7 @@ class File {
     if (this.fd === -1)
       throw new Error('File is closed.');
 
-    const r = await fs.read(this.fd, out, 0, size, pos);
+    const r = await this.fs.read(this.fd, out, 0, size, pos);
 
     if (r !== size)
       throw new IOError('read', this.index, pos, size);

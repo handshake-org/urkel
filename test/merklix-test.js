@@ -343,6 +343,15 @@ async function pummel(db) {
       assert.bufferEqual(data, value);
   }
 
+  {
+    const stat1 = await tree.store.stat();
+    const b = db.batch();
+    await tree.compact(b);
+    await b.write();
+    const stat2 = await tree.store.stat();
+    assert(stat1.size > stat2.size);
+  }
+
   await tree.close();
   await db.close();
 }

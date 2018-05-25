@@ -406,7 +406,7 @@ function decodeNode(data, hash, bits, index, pos) {
 
   switch (data[0]) {
     case NULL:
-      return NIL;
+      return exports.NIL;
     case INTERNAL:
       node = Internal.decode(data, hash, bits);
       break;

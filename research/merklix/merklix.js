@@ -21,9 +21,9 @@ const {
   ensureHash,
   hasBit,
   hashLeaf,
-  hashInternal,
   fromRecord,
-  toRecord
+  toRecord,
+  randomPath
 } = common;
 
 const {
@@ -89,9 +89,12 @@ class Merklix {
     assert(!db || typeof db === 'object');
     assert((depth >>> 0) === depth);
 
-    const Store = prefix
-      ? FileStore
-      : MemoryStore;
+    let Store = FileStore;
+
+    if (!prefix) {
+      Store = MemoryStore;
+      prefix = '/store';
+    }
 
     this.hash = ensureHash(hash);
     this.bits = bits;
@@ -493,7 +496,6 @@ class Merklix {
     const root = this._commit(this.root, 0);
 
     await this.store.commit();
-    await this.store.sync();
 
     this.root = root;
     this.originalRoot = root.hash(this.hash);
@@ -653,48 +655,59 @@ class Merklix {
     if (this.db)
       assert(batch && typeof batch.put === 'function');
 
+    const Store = this.store.constructor;
+    const prefix = randomPath(this.prefix);
+    const {hash, bits} = this;
+
     const node = await this.getRoot();
-    const index = await this.store.advance();
 
-    this.store.start();
+    const store = new Store(prefix, hash, bits);
+    await store.open();
+    store.start();
 
-    const root = await this._compact(node, 0);
+    const root = await this._compact(node, store, 0);
 
     assert(root.hash(this.ctx).equals(node.hash(this.ctx)));
 
-    await this.store.commit();
-    await this.store.sync();
-    await this.store.prune(index);
+    await store.commit();
+    await store.close();
+
+    // Need lock here.
+    await this.store.close();
+    await this.store.destroy();
+    await store.rename(this.prefix);
+    await store.open();
 
     if (batch) {
       assert(this.db);
       this.putRoot(batch, root);
     }
 
+    this.store = store;
     this.root = root;
   }
 
-  async _compact(node, depth) {
+  async _compact(node, store, depth) {
     if (this.store.wb.written > (100 << 20)) {
-      await this.store.flush();
-      this.store.start();
+      await store.flush();
+      store.start();
     }
 
     switch (node.type()) {
       case NULL: {
         if (depth === 0)
-          this.store.writeNull();
+          store.writeNull();
         return node;
       }
 
       case INTERNAL: {
-        node.left = await this._compact(node.left, depth + 1);
-        node.right = await this._compact(node.right, depth + 1);
+        node.left = await this._compact(node.left, store, depth + 1);
+        node.right = await this._compact(node.right, store, depth + 1);
 
         node.index = 0;
         node.pos = 0;
 
-        this.store.writeNode(node);
+        store.writeNode(node);
 
         return node.toHash(this.hash);
       }
@@ -704,15 +717,15 @@ class Merklix {
         node.pos = 0;
         node.value = await node.getValue(this.store);
 
-        this.store.writeValue(node);
-        this.store.writeNode(node);
+        store.writeValue(node);
+        store.writeNode(node);
 
         return node.toHash(this.hash);
       }
 
       case HASH: {
         const r = await node.resolve(this.store);
-        return this._compact(r, depth);
+        return this._compact(r, store, depth);
       }
     }
 
