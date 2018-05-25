@@ -394,11 +394,16 @@ class FileStore {
   }
 
   start() {
+    assert(this.wb.written === 0);
+    assert(this.wb.start === 0);
     this.wb.offset = this.current.pos;
     this.wb.index = this.current.index;
-    this.wb.start = 0;
-    this.wb.written = 0;
     return this;
+  }
+
+  writeNull() {
+    this.wb.expand(this.nodeSize);
+    this.wb.pad(this.nodeSize);
   }
 
   writeNode(node) {
@@ -686,7 +691,15 @@ class WriteBuffer {
     this.index = 0;
     this.start = 0;
     this.written = 0;
+    this.chunks = [];
     this.data = EMPTY;
+  }
+
+  reset() {
+    this.offset = 0;
+    this.index = 0;
+    this.start = 0;
+    this.written = 0;
     this.chunks = [];
   }
 
@@ -740,11 +753,7 @@ class WriteBuffer {
     if (this.written > this.start)
       chunks.push(this.render());
 
-    this.offset = 0;
-    this.index = 0;
-    this.start = 0;
-    this.written = 0;
-    this.chunks = [];
+    this.reset();
 
     return chunks;
   }
@@ -849,6 +858,11 @@ class MemoryStore {
     return pos;
   }
 
+  pad(size) {
+    this.data.fill(0x00, this.written, this.written + size);
+    this.written += size;
+  }
+
   async sync() {
     if (this.index === 0)
       throw new Error('Store closed.');
@@ -871,6 +885,11 @@ class MemoryStore {
 
   start() {
     return this;
+  }
+
+  writeNull() {
+    this.expand(this.nodeSize);
+    this.pad(this.nodeSize);
   }
 
   writeNode(node) {
@@ -905,6 +924,8 @@ class MemoryStore {
   }
 
   async flush() {}
+
+  async commit() {}
 }
 
 /*

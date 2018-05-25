@@ -139,7 +139,7 @@ class Merklix {
     this.root = NIL;
     this.originalRoot = this.hash.zero;
 
-    await this.store.close();
+    return this.store.close();
   }
 
   async getRecord(root) {
@@ -155,22 +155,24 @@ class Merklix {
       });
     }
 
-    if (raw.length !== this.hash.size + 6)
-      throw new AssertionError('Database corruption.');
-
     return fromRecord(raw);
   }
 
-  putRecord(batch, hash, prev, index, pos) {
-    const raw = toRecord(prev, index, pos);
+  putRecord(batch, hash, index, pos) {
+    const raw = toRecord(index, pos);
     batch.put(hash, raw);
   }
 
-  putRoot(batch, root, prev) {
+  putRoot(batch, root) {
+    if (root.isNull()) {
+      batch.del(STATE_KEY);
+      return;
+    }
+
     const hash = root.hash(this.hash);
     const {index, pos} = root;
 
-    this.putRecord(batch, hash, prev, index, pos);
+    this.putRecord(batch, hash, index, pos);
 
     batch.put(STATE_KEY, hash);
   }
@@ -198,7 +200,7 @@ class Merklix {
         return this.root.toHash(this.hash);
     }
 
-    const [, index, pos] = await this.getRecord(root);
+    const [index, pos] = await this.getRecord(root);
 
     return new Hash(root, index, pos);
   }
@@ -486,13 +488,11 @@ class Merklix {
     if (this.db)
       assert(batch && typeof batch.put === 'function');
 
-    const prev = this.originalRoot;
-
     this.store.start();
 
     const root = this._commit(this.root, 0);
 
-    await this.store.flush();
+    await this.store.commit();
     await this.store.sync();
 
     this.root = root;
@@ -500,7 +500,7 @@ class Merklix {
 
     if (batch) {
       assert(this.db);
-      this.putRoot(batch, root, prev);
+      this.putRoot(batch, root);
     }
 
     return this.originalRoot;
@@ -510,6 +510,10 @@ class Merklix {
     switch (node.type()) {
       case NULL: {
         assert(node.index === 0);
+
+        if (depth === 0)
+          this.store.writeNull();
+
         return node;
       }
 
@@ -591,29 +595,6 @@ class Merklix {
     return verify(this.hash, this.bits, root, key, proof);
   }
 
-  async getPrevious(rootHash) {
-    assert(this.isHash(rootHash));
-    const [prev] = await this.getRecord(rootHash);
-    return prev;
-  }
-
-  async getPastRoots(rootHash) {
-    assert(this.isHash(rootHash));
-
-    const roots = [];
-
-    for (;;) {
-      if (rootHash.equals(this.hash.zero))
-        break;
-
-      roots.push(rootHash);
-
-      rootHash = await this.getPrevious(rootHash);
-    }
-
-    return roots.reverse();
-  }
-
   async keys(iter) {
     return this.iterate(false, iter);
   }
@@ -673,38 +654,27 @@ class Merklix {
       assert(batch && typeof batch.put === 'function');
 
     const node = await this.getRoot();
-
-    if (node.isNull())
-      return;
-
     const index = await this.store.advance();
 
     this.store.start();
 
-    const root = await this._compact(node);
+    const root = await this._compact(node, 0);
 
-    assert(root.isHash());
     assert(root.hash(this.ctx).equals(node.hash(this.ctx)));
 
-    await this.store.flush();
+    await this.store.commit();
     await this.store.sync();
     await this.store.prune(index);
 
     if (batch) {
       assert(this.db);
-
-      const roots = await this.getPastRoots(root.data);
-
-      for (const hash of roots)
-        batch.del(hash);
-
-      this.putRoot(batch, root, this.hash.zero);
+      this.putRoot(batch, root);
     }
 
     this.root = root;
   }
 
-  async _compact(node) {
+  async _compact(node, depth) {
     if (this.store.wb.written > (100 << 20)) {
       await this.store.flush();
       this.store.start();
@@ -712,12 +682,14 @@ class Merklix {
 
     switch (node.type()) {
       case NULL: {
+        if (depth === 0)
+          this.store.writeNull();
         return node;
       }
 
       case INTERNAL: {
-        node.left = await this._compact(node.left);
-        node.right = await this._compact(node.right);
+        node.left = await this._compact(node.left, depth + 1);
+        node.right = await this._compact(node.right, depth + 1);
 
         node.index = 0;
         node.pos = 0;
@@ -740,7 +712,7 @@ class Merklix {
 
       case HASH: {
         const r = await node.resolve(this.store);
-        return this._compact(r);
+        return this._compact(r, depth);
       }
     }
 

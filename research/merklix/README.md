@@ -186,11 +186,18 @@ struct {
 
 The actual leaf data is stored at `value_position` in `value_file`.
 
-This module will store the tree in a series of append-only files. Atomicity
-with a parent database can be achieved by fsyncing every write and inserting
-the best root hash and file position into something like leveldb (once the
-fsync has completed). We use a particularly large write buffer to batch every
-single insert.
+This module will store the tree in a series of append-only files. A
+particularly large write buffer is used to batch all insertions. Atomicity with
+a parent database can be achieved by fsyncing every write and inserting the
+best root hash and file position into something like leveldb (once the fsync
+has completed).
+
+### Collision Attacks
+
+It is possible for someone to grind a key to create bit collisions. Currently,
+the entire bitcoin network produces 72-80 bit collisions on block hashes. So
+worst case, that's 72-80 levels deep, but while storage increases, the rounds
+of hashing are still half (or less than half) of that of a sparse merkle tree.
 
 ## Contribution and License Agreement
 

@@ -106,28 +106,22 @@ function serializeU32(num) {
 
 function fromRecord(data) {
   assert(Buffer.isBuffer(data));
-  assert(data.length > 6);
-
-  const size = data.length - 6;
+  assert(data.length === 6);
 
   return [
-    data.slice(0, size),
-    data.readUInt16LE(size, true),
-    data.readUInt32LE(size + 2, true)
+    data.readUInt16LE(0, true),
+    data.readUInt32LE(2, true)
   ];
 }
 
-function toRecord(prev, index, pos) {
-  assert(Buffer.isBuffer(prev));
-  assert(prev.length > 0);
+function toRecord(index, pos) {
   assert((index & 0xffff) === index);
   assert((pos >>> 0) === pos);
 
-  const buf = Buffer.allocUnsafe(prev.length + 6);
-  prev.copy(buf, 0);
+  const buf = Buffer.allocUnsafe(6);
 
-  buf.writeUInt16LE(index, prev.length, true);
-  buf.writeUInt32LE(pos, prev.length + 2, true);
+  buf.writeUInt16LE(index, 0, true);
+  buf.writeUInt32LE(pos, 2, true);
 
   return buf;
 }
