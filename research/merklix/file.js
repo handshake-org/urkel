@@ -70,6 +70,16 @@ class File {
     return fs.fsync(this.fd);
   }
 
+  async truncate(size) {
+    if (this.fd === -1)
+      throw new Error('File already closed.');
+
+    if (size === this.pos)
+      return undefined;
+
+    return fs.ftruncate(this.fd, size);
+  }
+
   async read(pos, size) {
     if (this.fd === -1)
       throw new Error('File is closed.');
@@ -106,6 +116,20 @@ class File {
     this.pos += w;
 
     return pos;
+  }
+
+  async rawRead(pos, size, out) {
+    assert(size <= out.length);
+
+    if (this.fd === -1)
+      throw new Error('File is closed.');
+
+    const r = await fs.read(this.fd, out, 0, size, pos);
+
+    if (r !== size)
+      throw new IOError('read', this.index, pos, size);
+
+    return out;
   }
 }
 
