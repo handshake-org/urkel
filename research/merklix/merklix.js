@@ -75,19 +75,19 @@ class Merklix {
    * @param {Number} bits
    * @param {String} prefix
    * @param {Object} [db=null]
-   * @param {Number} [limit=4]
+   * @param {Number} [depth=4]
    */
 
-  constructor(hash, bits, prefix, db, limit) {
-    if (limit == null)
-      limit = 4;
+  constructor(hash, bits, prefix, db, depth) {
+    if (depth == null)
+      depth = 4;
 
     assert(hash && typeof hash.digest === 'function');
     assert((bits >>> 0) === bits);
     assert(bits > 0 && (bits & 7) === 0);
     assert(!prefix || typeof prefix === 'string');
     assert(!db || typeof db === 'object');
-    assert((limit >>> 0) === limit);
+    assert((depth >>> 0) === depth);
 
     const Store = prefix
       ? FileStore
@@ -100,8 +100,7 @@ class Merklix {
     this.store = new Store(prefix, hash, bits);
     this.originalRoot = this.hash.zero;
     this.root = NIL;
-    this.cacheGen = 0;
-    this.cacheLimit = limit;
+    this.cacheDepth = depth;
   }
 
   isKey(key) {
@@ -139,7 +138,6 @@ class Merklix {
   async close() {
     this.root = NIL;
     this.originalRoot = this.hash.zero;
-    this.cacheGen = 0;
 
     await this.store.close();
   }
@@ -495,7 +493,7 @@ class Merklix {
 
     this.store.start();
 
-    const root = this._commit(this.root);
+    const root = this._commit(this.root, 0);
 
     await this.store.flush();
     await this.store.sync();
@@ -511,7 +509,7 @@ class Merklix {
     return this.originalRoot;
   }
 
-  _commit(node) {
+  _commit(node, depth) {
     switch (node.type()) {
       case NULL: {
         assert(node.index === 0);
@@ -519,13 +517,16 @@ class Merklix {
       }
 
       case INTERNAL: {
-        node.left = this._commit(node.left);
-        node.right = this._commit(node.right);
+        node.left = this._commit(node.left, depth + 1);
+        node.right = this._commit(node.right, depth + 1);
 
         if (node.index === 0)
           this.store.writeNode(node);
 
         assert(node.index !== 0);
+
+        if (depth < this.cacheDepth)
+          return node;
 
         return node.toHash(this.hash);
       }
@@ -555,8 +556,8 @@ class Merklix {
     if (root == null)
       root = this.originalRoot;
 
-    const {hash, bits, prefix, db, cacheLimit} = this;
-    const tree = new this.constructor(hash, bits, prefix, db, cacheLimit);
+    const {hash, bits, prefix, db, cacheDepth} = this;
+    const tree = new this.constructor(hash, bits, prefix, db, cacheDepth);
 
     tree.store = this.store;
 

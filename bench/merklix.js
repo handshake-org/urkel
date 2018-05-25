@@ -19,20 +19,12 @@ const TOTAL = BLOCKS * PER_BLOCK;
 const FILE = __dirname + '/merklixdb';
 
 async function stress(prefix, db) {
-  const tree = new Merklix(sha256, 160, prefix, db, 0);
+  const tree = new Merklix(sha256, 160, prefix, db, 4);
   const pairs = [];
   const keys = [];
 
   await db.open();
   await tree.open();
-
-  let count = 0;
-
-  await tree.keys((k) => {
-    count += 1;
-    if ((count % 100000) === 0)
-      console.log('Leaves: %d', count);
-  });
 
   console.log(
     'Committing %d values to tree at a rate of %d per block.',
@@ -77,22 +69,6 @@ async function stress(prefix, db) {
 
       await doProof(tree, i, last);
     }
-
-    /*
-    if (i && (i % (INTERVAL * 20)) === 0) {
-      console.log('Compacting...');
-      const before = await tree.store.stat();
-      const now = Date.now();
-      const b = db.batch();
-      await tree.compact(b);
-      await b.write();
-      console.log('Compact: %d', Date.now() - now);
-      const after = await tree.store.stat();
-      console.log('Compacted: %d->%d',
-        (before.size / 1024 / 1024).toFixed(2),
-        (after.size / 1024 / 1024).toFixed(2));
-    }
-    */
 
     if ((i % RATE) === 0)
       keys.push(last);
