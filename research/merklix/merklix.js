@@ -176,6 +176,9 @@ class Merklix {
   }
 
   async getHistory(root) {
+    if (root == null)
+      root = this.originalRoot;
+
     if (typeof root === 'string')
       root = Buffer.from(root, 'hex');
 
@@ -201,9 +204,6 @@ class Merklix {
   }
 
   async getRoot(root) {
-    if (root == null)
-      root = this.originalRoot;
-
     const node = await this.getHistory(root);
 
     if (node.isHash())
@@ -286,9 +286,7 @@ class Merklix {
       // Leaf node.
       if (node.isLeaf()) {
         // Current key.
-        const other = node.key;
-
-        if (key.equals(other)) {
+        if (key.equals(node.key)) {
           // Exact leaf already exists.
           if (leaf.equals(node.data))
             return root;
@@ -302,7 +300,7 @@ class Merklix {
 
         // Insert placeholder leaves to grow
         // the branch if we have bit collisions.
-        while (hasBit(key, depth) === hasBit(other, depth)) {
+        while (hasBit(key, depth) === hasBit(node.key, depth)) {
           // Child-less sidenode.
           nodes.push(NIL);
           depth += 1;
@@ -381,10 +379,8 @@ class Merklix {
 
       // Leaf node.
       if (node.isLeaf()) {
-        // Current key.
-        const other = node.key;
-
-        if (!key.equals(other))
+        // Not our key.
+        if (!key.equals(node.key))
           return root;
 
         // Root can be a leaf.
@@ -397,6 +393,7 @@ class Merklix {
         let s = nodes.pop();
         depth -= 1;
 
+        // One extra disk read.
         if (s.isHash())
           s = await s.resolve(this.store);
 

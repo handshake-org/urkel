@@ -46,6 +46,7 @@ SHA1.id = 'sha1';
 SHA1.size = 20;
 SHA1.bits = 160;
 SHA1.zero = Buffer.alloc(20, 0x00);
+SHA1.ctx = new SHA1();
 
 class SHA256 {
   constructor() {
@@ -90,6 +91,7 @@ SHA256.id = 'sha256';
 SHA256.size = 32;
 SHA256.bits = 256;
 SHA256.zero = Buffer.alloc(32, 0x00);
+SHA256.ctx = new SHA256();
 
 exports.sha1 = SHA1;
 exports.sha256 = SHA256;

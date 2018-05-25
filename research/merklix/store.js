@@ -17,7 +17,8 @@ const {
   ensureHash,
   parseU32,
   serializeU32,
-  EMPTY
+  EMPTY,
+  randomPath
 } = common;
 
 const {
@@ -30,9 +31,9 @@ const {
  * Constants
  */
 
-const MAX_FILE_SIZE = 0x7fffffff;
+const MAX_FILE_SIZE = 0x7ffff000;
 const MAX_FILES = 0xffff;
-const MAX_OPEN_FILES = 64;
+const MAX_OPEN_FILES = 32;
 
 /**
  * File Store
@@ -78,10 +79,16 @@ class FileStore {
         continue;
 
       const path = Path.resolve(this.prefix, name);
+      const stat = await fs.lstat(path);
+
+      if (!stat.isFile())
+        continue;
 
       files.push({
         index,
-        path
+        name,
+        path,
+        size: stat.size
       });
     }
 
@@ -91,16 +98,14 @@ class FileStore {
   async stat() {
     const files = await this.readdir();
 
-    let size = 0;
+    let total = 0;
 
-    for (const {path} of files) {
-      const stat = await fs.stat(path);
-      size += stat.size;
-    }
+    for (const {size} of files)
+      total += stat.size;
 
     return {
       files: files.length,
-      size
+      size: total
     };
   }
 
@@ -112,14 +117,10 @@ class FileStore {
 
     const files = await this.readdir();
 
-    let best = 1;
+    if (files.length === 0)
+      return 1;
 
-    for (const {index} of files) {
-      if (index > best)
-        best = index;
-    }
-
-    return best;
+    return files[files.length - 1].index;
   }
 
   async open() {
@@ -134,13 +135,15 @@ class FileStore {
     if (this.index === 0)
       throw new Error('Store already closed.');
 
-    for (let i = 0; i < this.files.length; i++)
-      await this.closeFile(i);
+    const files = this.files;
 
-    this.files.length = 0;
+    this.files = [];
     this.current = null;
     this.index = 0;
     this.total = 0;
+
+    for (const file of files)
+      await file.close();
   }
 
   async destroy() {
@@ -152,7 +155,15 @@ class FileStore {
     for (const {path} of files)
       await fs.unlink(path);
 
-    return fs.rmdir(this.prefix);
+    try {
+      await fs.rmdir(this.prefix);
+    } catch (e) {
+      if (e.code === 'ENOTEMPTY' || e.errno === -39) {
+        const path = randomPath(this.prefix);
+        return this.rename(path);
+      }
+      throw e;
+    }
   }
 
   async rename(prefix) {
@@ -184,10 +195,16 @@ class FileStore {
       const file = new File(index);
       const name = this.name(index);
 
+      await file.open(name, flags);
+
+      // Handle race condition.
+      if (this.files[index]) {
+        await file.close();
+        return this.files[index];
+      }
+
       if (this.total >= MAX_OPEN_FILES)
         this.evict();
-
-      await file.open(name, flags);
 
       this.files[index] = file;
       this.total += 1;
@@ -210,7 +227,7 @@ class FileStore {
     this.files[index] = null;
     this.total -= 1;
 
-    await file.close();
+    return file.close();
   }
 
   async unlinkFile(index) {
@@ -221,7 +238,8 @@ class FileStore {
       throw new Error('Store is closed.');
 
     await this.closeFile(index);
-    await fs.unlink(this.name(index));
+
+    return fs.unlink(this.name(index));
   }
 
   async prune(max) {
@@ -269,11 +287,9 @@ class FileStore {
     if (this.index === 0)
       throw new Error('Store is closed.');
 
-    const files = [];
+    let total = 0;
 
-    for (let i = 0; i < this.files.length; i++) {
-      const file = this.files[i];
-
+    for (const file of this.files) {
       if (!file)
         continue;
 
@@ -283,19 +299,40 @@ class FileStore {
       if (file.reads > 0)
         continue;
 
-      files.push(file);
+      total += 1;
     }
 
-    if (files.length === 0)
-      return;
+    if (total === 0)
+      return false;
 
-    const i = Math.random() * files.length | 0;
+    let i = Math.random() * total | 0;
+
+    for (const file of this.files) {
+      if (!file)
+        continue;
+
+      if (file.index === this.current.index)
+        continue;
+
+      if (file.reads > 0)
+        continue;
+
+      if (i === 0) {
+        i = file.index;
+        break;
+      }
+
+      i -= 1;
+    }
+
     const file = files[i];
 
     this.files[file.index] = null;
     this.total -= 1;
 
     file.closeSync();
+
+    return true;
   }
 
   async read(index, pos, size) {

@@ -143,6 +143,21 @@ async function runTest(db) {
     assert.strictEqual(data, null);
   }
 
+  // Iterate over values.
+  {
+    const items = [];
+
+    await tree.values((key, value) => {
+      items.push([key, value]);
+    });
+
+    assert.deepStrictEqual(items, [
+      [FOO1, BAR1],
+      [FOO2, BAR2],
+      [FOO3, BAR3]
+    ]);
+  }
+
   // Test persistence.
   {
     b = db.batch();
@@ -281,6 +296,36 @@ async function pummel(db) {
     await tree.open();
 
     assert.bufferEqual(tree.rootHash(), root);
+  }
+
+  {
+    const expect = [];
+
+    for (const [i, item] of items.entries()) {
+      if (i < (items.length >>> 1))
+        continue;
+
+      expect.push(item);
+    }
+
+    expect.sort((a, b) => {
+      const [x] = a;
+      const [y] = b;
+      return x.compare(y);
+    });
+
+    let i = 0;
+
+    await tree.values((key, value) => {
+      const [k, v] = expect[i];
+
+      assert.bufferEqual(key, k);
+      assert.bufferEqual(value, v);
+
+      i += 1;
+    });
+
+    assert.strictEqual(i, items.length >>> 1);
   }
 
   for (let i = 0; i < items.length; i += 11) {

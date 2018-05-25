@@ -133,9 +133,10 @@ function toRecord(prev, index, pos) {
 }
 
 function randomString() {
-  const n = Math.random();
-  const s = n.toString(32);
-  return s.substring(2);
+  const m = Number.MAX_SAFE_INTEGER;
+  const n = Math.random() * m;
+  const s = Math.floor(n);
+  return s.toString(32);
 }
 
 function randomPath(path) {

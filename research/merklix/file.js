@@ -8,6 +8,7 @@
 
 const assert = require('assert');
 const fs = require('bfile');
+const {IOError} = require('./errors');
 
 /**
  * File
@@ -40,52 +41,71 @@ class File {
     if (this.fd === -1)
       throw new Error('File already closed.');
 
-    await fs.close(this.fd);
+    const fd = this.fd;
 
     this.fd = -1;
     this.pos = 0;
     this.reads = 0;
+
+    return fs.close(fd);
   }
 
   closeSync() {
     if (this.fd === -1)
       throw new Error('File already closed.');
 
-    fs.closeSync(this.fd);
+    const fd = this.fd;
 
     this.fd = -1;
     this.pos = 0;
     this.reads = 0;
+
+    fs.closeSync(fd);
+  }
+
+  async sync() {
+    if (this.fd === -1)
+      throw new Error('File already closed.');
+
+    return fs.fsync(this.fd);
   }
 
   async read(pos, size) {
+    if (this.fd === -1)
+      throw new Error('File is closed.');
+
     const buf = Buffer.allocUnsafe(size);
 
     this.reads += 1;
 
-    const r = await fs.read(this.fd, buf, 0, size, pos);
+    let r;
 
-    this.reads -= 1;
+    try {
+      r = await fs.read(this.fd, buf, 0, size, pos);
+    } finally {
+      this.reads -= 1;
+    }
 
-    assert.strictEqual(r, size);
+    if (r !== size)
+      throw new IOError('read', this.index, pos, size);
 
     return buf;
   }
 
   async write(data) {
+    if (this.fd === -1)
+      throw new Error('File is closed.');
+
     const pos = this.pos;
 
     const w = await fs.write(this.fd, data, 0, data.length, null);
 
-    assert.strictEqual(w, data.length);
+    if (w !== data.length)
+      throw new IOError('write', this.index, pos, data.length);
 
     this.pos += w;
 
     return pos;
-  }
-
-  async sync() {
-    return fs.fsync(this.fd);
   }
 }
 

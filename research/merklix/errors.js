@@ -21,6 +21,7 @@ class MissingNodeError extends Error {
 
   constructor(options = {}) {
     super();
+
     this.type = 'MissingNodeError';
     this.name = 'MissingNodeError';
     this.code = 'ERR_MISSING_NODE';
@@ -39,6 +40,33 @@ class MissingNodeError extends Error {
 }
 
 /**
+ * IO Error
+ */
+
+class IOError extends Error {
+  /**
+   * Create an error.
+   * @constructor
+   */
+
+  constructor(syscall, index, pos, size) {
+    super();
+
+    this.type = 'IOError';
+    this.name = 'IOError';
+    this.code = 'ERR_IO';
+    this.syscall = syscall;
+    this.index = index;
+    this.pos = pos;
+    this.size = size;
+    this.message = `Invalid ${syscall} for file ${index} at ${pos}:${size}.`;
+
+    if (Error.captureStackTrace)
+      Error.captureStackTrace(this, IOError);
+  }
+}
+
+/**
  * Assertion Error
  */
 
@@ -53,4 +81,5 @@ class AssertionError extends assert.AssertionError {
  */
 
 exports.MissingNodeError = MissingNodeError;
+exports.IOError = IOError;
 exports.AssertionError = AssertionError;
