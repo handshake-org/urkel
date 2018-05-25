@@ -117,13 +117,20 @@ async function doProof(tree, i, key) {
   if (proof.key)
     size += proof.key.length;
 
-  // if (proof.value)
-  //   size += proof.value.length;
+  let vsize = 0;
+
+  if (proof.value)
+    vsize = proof.value.length;
+
+  size -= vsize;
+
+  const [code, value] = tree.verify(key, proof);
+  assert(code === 0);
 
   console.log('Proof %d length: %d', i, proof.nodes.length);
   console.log('Proof %d size: %d', i, size);
   console.log('Proof %d compressed size: %d',
-    i, proof.getSize(tree.hash, tree.bits) - 300);
+    i, proof.getSize(tree.hash, tree.bits) - (1 + vsize));
 }
 
 async function bench(prefix, db) {

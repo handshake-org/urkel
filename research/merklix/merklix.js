@@ -23,8 +23,7 @@ const {
   hashLeaf,
   hashInternal,
   fromRecord,
-  toRecord,
-  randomPath
+  toRecord
 } = common;
 
 const {
@@ -593,6 +592,11 @@ class Merklix {
   }
 
   verify(root, key, proof) {
+    if (key instanceof Proof) {
+      proof = key;
+      key = root;
+      root = this.originalRoot;
+    }
     return verify(this.hash, this.bits, root, key, proof);
   }
 
@@ -634,6 +638,7 @@ class Merklix {
 
     const root = await this._compact(node);
     assert(root.isHash());
+    assert(root.hash(this.ctx).equals(node.hash(this.ctx)));
 
     await this.store.flush();
     await this.store.sync();
@@ -686,8 +691,8 @@ class Merklix {
       }
 
       case HASH: {
-        const r = await node.resolve(this.store);
-        return this._compact(r);
+        node = await node.resolve(this.store);
+        return this._compact(node);
       }
     }
 

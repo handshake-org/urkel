@@ -12,8 +12,19 @@ const fs = require('bfile');
 const common = require('./common');
 const File = require('./file');
 const nodes = require('./nodes');
-const {ensureHash, parseU32, EMPTY} = common;
-const {decodeNode, NIL, Internal} = nodes;
+
+const {
+  ensureHash,
+  parseU32,
+  serializeU32,
+  EMPTY
+} = common;
+
+const {
+  decodeNode,
+  NIL,
+  Internal
+} = nodes;
 
 /*
  * Constants
@@ -46,14 +57,51 @@ class FileStore {
   }
 
   name(index) {
-    assert((index >>> 0) === index);
-
-    let name = index.toString(10);
-
-    while (name.length < 10)
-      name = '0' + name;
-
+    const name = serializeU32(index);
     return Path.resolve(this.prefix, name);
+  }
+
+  async readdir() {
+    const names = await fs.readdir(this.prefix);
+    const files = [];
+
+    for (const name of names) {
+      const index = parseU32(name);
+
+      if (index === -1)
+        continue;
+
+      if (index === 0)
+        continue;
+
+      if (index > MAX_FILES)
+        continue;
+
+      const path = Path.resolve(this.prefix, name);
+
+      files.push({
+        index,
+        path
+      });
+    }
+
+    return files.sort((a, b) => a.index - b.index);
+  }
+
+  async stat() {
+    const files = await this.readdir();
+
+    let size = 0;
+
+    for (const {path} of files) {
+      const stat = await fs.stat(path);
+      size += stat.size;
+    }
+
+    return {
+      files: files.length,
+      size
+    };
   }
 
   async ensure() {
@@ -62,24 +110,16 @@ class FileStore {
 
     await fs.mkdirp(this.prefix, 0o770);
 
-    const list = await fs.readdir(this.prefix);
+    const files = await this.readdir();
 
-    let index = 1;
+    let best = 1;
 
-    for (const name of list) {
-      const num = parseU32(name);
-
-      if (num === -1)
-        continue;
-
-      if (num > MAX_FILES)
-        continue;
-
-      if (num > index)
-        index = num;
+    for (const {index} of files) {
+      if (index > best)
+        best = index;
     }
 
-    return index;
+    return best;
   }
 
   async open() {
@@ -103,44 +143,14 @@ class FileStore {
     this.total = 0;
   }
 
-  async stat() {
-    const list = await fs.readdir(this.prefix);
-
-    let files = 0;
-    let size = 0;
-
-    for (const name of list) {
-      const num = parseU32(name);
-
-      if (num === -1)
-        continue;
-
-      if (num > MAX_FILES)
-        continue;
-
-      const file = Path.resolve(this.prefix, name);
-      const stat = await fs.stat(file);
-
-      files += 1;
-      size += stat.size;
-    }
-
-    return {
-      files,
-      size
-    };
-  }
-
   async destroy() {
     if (this.index !== 0)
       throw new Error('Store is opened.');
 
-    const list = await fs.readdir(this.prefix);
+    const files = await this.readdir();
 
-    for (const name of list) {
-      const file = Path.resolve(this.prefix, name);
-      await fs.unlink(file);
-    }
+    for (const {path} of files)
+      await fs.unlink(path);
 
     return fs.rmdir(this.prefix);
   }
@@ -214,6 +224,47 @@ class FileStore {
     await fs.unlink(this.name(index));
   }
 
+  async prune(max) {
+    assert((max >>> 0) === max);
+
+    if (this.index === 0)
+      throw new Error('Store is closed.');
+
+    for (let i = 0; i < this.files.length; i++) {
+      const file = this.files[i];
+
+      if (!file)
+        continue;
+
+      if (file.index === this.current.index)
+        continue;
+
+      await this.closeFile(file.index);
+    }
+
+    const files = await this.readdir();
+
+    for (const {path, index} of files) {
+      if (index > max)
+        continue;
+
+      await fs.unlink(path);
+    }
+  }
+
+  async advance() {
+    if (this.index === 0)
+      throw new Error('Store is closed.');
+
+    await this.current.sync();
+    await this.closeFile(this.index);
+
+    this.current = await this.openFile(this.index + 1, 'a+');
+    this.index += 1;
+
+    return this.index - 1;
+  }
+
   evict() {
     if (this.index === 0)
       throw new Error('Store is closed.');
@@ -252,41 +303,8 @@ class FileStore {
       throw new Error('Store is closed.');
 
     const file = await this.openFile(index, 'r');
+
     return file.read(pos, size);
-  }
-
-  async prune(max) {
-    for (let i = 0; i < this.files.length; i++) {
-      if (i === this.current.index)
-        continue;
-      await this.closeFile(i);
-    }
-
-    const list = await fs.readdir(this.prefix);
-
-    let index = 1;
-
-    for (const name of list) {
-      const num = parseU32(name);
-
-      if (num === -1)
-        continue;
-
-      if (num > max)
-        continue;
-
-      const file = Path.resolve(this.prefix, name);
-
-      await fs.unlink(file);
-    }
-  }
-
-  async advance() {
-    await this.current.sync();
-    await this.closeFile(this.index);
-    this.current = await this.openFile(this.index + 1, 'a+');
-    this.index += 1;
-    return this.index - 1;
   }
 
   async write(data) {
@@ -449,6 +467,13 @@ class MemoryStore {
     this.data = EMPTY;
   }
 
+  async stat() {
+    return {
+      files: 1,
+      size: this.written
+    };
+  }
+
   async open() {
     if (this.index !== 0)
       throw new Error('Store already opened.');
@@ -463,13 +488,6 @@ class MemoryStore {
     this.index = 0;
   }
 
-  async stat() {
-    return {
-      files: 1,
-      size: this.written
-    };
-  }
-
   async destroy() {
     if (this.index !== 0)
       throw new Error('Store is opened.');
@@ -477,6 +495,21 @@ class MemoryStore {
 
   async rename(prefix) {
     assert(typeof prefix === 'string');
+
+    if (this.index !== 0)
+      throw new Error('Store is opened.');
+  }
+
+  async prune(max) {
+    assert((max >>> 0) === max);
+
+    if (this.index === 0)
+      throw new Error('Store is closed.');
+  }
+
+  async advance() {
+    if (this.index === 0)
+      throw new Error('Store closed.');
   }
 
   async read(index, pos, bytes) {
@@ -515,7 +548,10 @@ class MemoryStore {
     return pos;
   }
 
-  async sync() {}
+  async sync() {
+    if (this.index === 0)
+      throw new Error('Store closed.');
+  }
 
   async readNode(index, pos) {
     const data = await this.read(index, pos, this.nodeSize);

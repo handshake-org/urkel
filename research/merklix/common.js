@@ -93,6 +93,17 @@ function parseU32(name) {
   return num;
 }
 
+function serializeU32(num) {
+  assert((num >>> 0) === num);
+
+  let str = num.toString(10);
+
+  while (str.length < 10)
+    str = '0' + str;
+
+  return str;
+}
+
 function fromRecord(data) {
   assert(Buffer.isBuffer(data));
   assert(data.length > 6);
@@ -109,7 +120,7 @@ function fromRecord(data) {
 function toRecord(prev, index, pos) {
   assert(Buffer.isBuffer(prev));
   assert(prev.length > 0);
-  assert((index & 0xffff) == index);
+  assert((index & 0xffff) === index);
   assert((pos >>> 0) === pos);
 
   const buf = Buffer.allocUnsafe(prev.length + 6);
@@ -153,6 +164,7 @@ exports.setBit = setBit;
 exports.hashInternal = hashInternal;
 exports.hashLeaf = hashLeaf;
 exports.parseU32 = parseU32;
+exports.serializeU32 = serializeU32;
 exports.fromRecord = fromRecord;
 exports.toRecord = toRecord;
 exports.randomString = randomString;
