@@ -26,6 +26,14 @@ async function stress(prefix, db) {
   await db.open();
   await tree.open();
 
+  let count = 0;
+
+  await tree.keys((k) => {
+    count += 1;
+    if ((count % 100000) === 0)
+      console.log('Leaves: %d', count);
+  });
+
   console.log(
     'Committing %d values to tree at a rate of %d per block.',
     TOTAL,
@@ -65,9 +73,9 @@ async function stress(prefix, db) {
 
       console.log('Commit: %d', Date.now() - now);
 
-      await doProof(tree, i, last);
-
       logMemory();
+
+      await doProof(tree, i, last);
     }
 
     /*
@@ -122,9 +130,7 @@ async function doProof(tree, i, key) {
   let vsize = 0;
 
   if (proof.value)
-    vsize = proof.value.length;
-
-  size -= vsize;
+    vsize = 1 + proof.value.length;
 
   const [code, value] = tree.verify(key, proof);
   assert(code === 0);
@@ -132,7 +138,7 @@ async function doProof(tree, i, key) {
   console.log('Proof %d length: %d', i, proof.nodes.length);
   console.log('Proof %d size: %d', i, size);
   console.log('Proof %d compressed size: %d',
-    i, proof.getSize(tree.hash, tree.bits) - (1 + vsize));
+    i, proof.getSize(tree.hash, tree.bits) - vsize);
 }
 
 async function bench(prefix, db) {

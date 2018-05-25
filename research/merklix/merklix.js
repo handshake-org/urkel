@@ -616,6 +616,60 @@ class Merklix {
     return roots.reverse();
   }
 
+  async keys(iter) {
+    return this.iterate(false, iter);
+  }
+
+  async values(iter) {
+    return this.iterate(true, iter);
+  }
+
+  async iterate(values, iter) {
+    assert(typeof values === 'boolean');
+    assert(typeof iter === 'function');
+
+    const node = await this.getRoot();
+
+    return this._iterate(node, values, iter);
+  }
+
+  async _iterate(node, values, iter) {
+    switch (node.type()) {
+      case NULL: {
+        return undefined;
+      }
+
+      case INTERNAL: {
+        await this._iterate(node.left, values, iter);
+        await this._iterate(node.right, values, iter);
+        return undefined;
+      }
+
+      case LEAF: {
+        let result = null;
+
+        if (values) {
+          const value = await node.getValue(this.store);
+          result = iter(node.key, value);
+        } else {
+          result = iter(node.key);
+        }
+
+        if (result instanceof Promise)
+          await result;
+
+        return undefined;
+      }
+
+      case HASH: {
+        const r = await node.resolve(this.store);
+        return this._iterate(r, values, iter);
+      }
+    }
+
+    throw new AssertionError('Unknown node.');
+  }
+
   async compact(batch) {
     if (this.db)
       assert(batch && typeof batch.put === 'function');
@@ -630,6 +684,7 @@ class Merklix {
     this.store.start();
 
     const root = await this._compact(node);
+
     assert(root.isHash());
     assert(root.hash(this.ctx).equals(node.hash(this.ctx)));
 
