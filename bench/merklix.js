@@ -9,7 +9,7 @@ const DB = require('../test/util/db');
 // const {sha256} = require('../test/util/util');
 const sha256 = require('bcrypto/lib/sha256');
 const Merklix = require('../research/merklix');
-const {wait, logMemory, createDB} = require('./util');
+const {wait, memory, logMemory, createDB} = require('./util');
 
 const BLOCKS = +process.argv[3] || 10000;
 const PER_BLOCK = +process.argv[4] || 500;
@@ -55,6 +55,8 @@ async function stress(prefix, db) {
     pairs.length = 0;
 
     if (i && (i % INTERVAL) === 0) {
+      memory();
+
       const now = Date.now();
 
       const b = db.batch();

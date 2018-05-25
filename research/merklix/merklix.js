@@ -116,10 +116,6 @@ class Merklix {
     return hash.length === this.hash.size;
   }
 
-  hashInternal(left, right) {
-    return hashInternal(this.hash, left, right);
-  }
-
   hashLeaf(key, value) {
     return hashLeaf(this.hash, key, value);
   }
@@ -167,14 +163,17 @@ class Merklix {
     return fromRecord(raw);
   }
 
-  writeRecord(batch, hash, prev, index, pos) {
+  putRecord(batch, hash, prev, index, pos) {
     const raw = toRecord(prev, index, pos);
     batch.put(hash, raw);
   }
 
-  writeRoot(batch, root, prev) {
+  putRoot(batch, root, prev) {
     const hash = root.hash(this.hash);
-    this.writeRecord(batch, hash, prev, root.index, root.pos);
+    const {index, pos} = root;
+
+    this.putRecord(batch, hash, prev, index, pos);
+
     batch.put(STATE_KEY, hash);
   }
 
@@ -194,10 +193,8 @@ class Merklix {
       if (this.root.isHash())
         return this.root;
 
-      const {index, pos} = this.root;
-
-      if (index !== 0)
-        return new Hash(root, index, pos);
+      if (this.root.index !== 0)
+        return this.root.toHash(this.hash);
     }
 
     const [, index, pos] = await this.getRecord(root);
@@ -508,14 +505,14 @@ class Merklix {
 
     if (batch) {
       assert(this.db);
-      this.writeRoot(batch, root, prev);
+      this.putRoot(batch, root, prev);
     }
 
     return this.originalRoot;
   }
 
   _commit(node) {
-    switch (node.type) {
+    switch (node.type()) {
       case NULL: {
         assert(node.index === 0);
         return node;
@@ -530,12 +527,7 @@ class Merklix {
 
         assert(node.index !== 0);
 
-        if (node.gen === this.cacheLimit)
-          return new Hash(node.hash(this.hash), node.index, node.pos);
-
-        node.gen += 1;
-
-        return node;
+        return node.toHash(this.hash);
       }
 
       case LEAF: {
@@ -547,10 +539,11 @@ class Merklix {
 
         assert(node.index !== 0);
 
-        return new Hash(node.hash(this.hash), node.index, node.pos);
+        return node.toHash(this.hash);
       }
 
       case HASH: {
+        assert(node.index !== 0);
         return node;
       }
     }
@@ -652,7 +645,7 @@ class Merklix {
       for (const hash of roots)
         batch.del(hash);
 
-      this.writeRoot(batch, root, this.hash.zero);
+      this.putRoot(batch, root, this.hash.zero);
     }
 
     this.root = root;
@@ -664,7 +657,7 @@ class Merklix {
       this.store.start();
     }
 
-    switch (node.type) {
+    switch (node.type()) {
       case NULL: {
         return node;
       }
@@ -678,21 +671,23 @@ class Merklix {
 
         this.store.writeNode(node);
 
-        return new Hash(node.hash(this.hash), node.index, node.pos);
+        return node.toHash(this.hash);
       }
 
       case LEAF: {
         node.index = 0;
         node.pos = 0;
         node.value = await node.getValue(this.store);
+
         this.store.writeValue(node);
         this.store.writeNode(node);
-        return new Hash(node.hash(this.hash), node.index, node.pos);
+
+        return node.toHash(this.hash);
       }
 
       case HASH: {
-        node = await node.resolve(this.store);
-        return this._compact(node);
+        const r = await node.resolve(this.store);
+        return this._compact(r);
       }
     }
 

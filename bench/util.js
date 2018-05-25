@@ -16,7 +16,7 @@ function memoryUsage() {
   };
 }
 
-function _logMemory(prefix) {
+function memory(prefix = 'Memory') {
   const mem = memoryUsage();
 
   console.log(
@@ -33,11 +33,11 @@ function logMemory() {
   const gc = global.gc;
 
   if (typeof gc === 'function') {
-    _logMemory('Pre-GC');
+    memory('Pre-GC');
     gc();
   }
 
-  _logMemory('Memory');
+  memory('Memory');
 }
 
 function wait() {
@@ -63,6 +63,7 @@ function createDB(cacheSize, compression) {
   });
 }
 
+exports.memory = memory;
 exports.logMemory = logMemory;
 exports.wait = wait;
 exports.createDB = createDB;

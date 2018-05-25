@@ -40,10 +40,13 @@ const typesByVal = [
  */
 
 class Node {
-  constructor(type) {
-    this.type = type;
+  constructor() {
     this.index = 0;
     this.pos = 0;
+  }
+
+  type() {
+    return -1;
   }
 
   hash(hash) {
@@ -51,7 +54,7 @@ class Node {
   }
 
   getSize(hash, bits) {
-    return this.constructor.getSize(hash, bits);
+    return Internal.getSize(hash, bits);
   }
 
   write(data, off, hash, bits) {
@@ -59,7 +62,7 @@ class Node {
   }
 
   encode(hash, bits) {
-    const size = Internal.getSize(hash, bits);
+    const size = this.getSize(hash, bits);
     const data = Buffer.allocUnsafe(size);
     this.write(data, 0, hash, bits);
     return data;
@@ -67,6 +70,10 @@ class Node {
 
   decode(data, hash, bits) {
     throw new AssertionError('Unimplemented.');
+  }
+
+  toHash(hash) {
+    return new Hash(this.hash(hash), this.index, this.pos);
   }
 
   async getLeft(store) {
@@ -90,19 +97,19 @@ class Node {
   }
 
   isNull() {
-    return this.type === NULL;
+    return false;
   }
 
   isInternal() {
-    return this.type === INTERNAL;
+    return false;
   }
 
   isLeaf() {
-    return this.type === LEAF;
+    return false;
   }
 
   isHash() {
-    return this.type === HASH;
+    return false;
   }
 
   static getSize(hash, bits) {
@@ -115,8 +122,16 @@ class Node {
  */
 
 class Null extends Node {
-  constructor(type) {
-    super(NULL);
+  constructor() {
+    super();
+  }
+
+  type() {
+    return NULL;
+  }
+
+  isNull() {
+    return true;
   }
 
   inspect() {
@@ -130,16 +145,21 @@ class Null extends Node {
 
 class Internal extends Node {
   constructor(left, right) {
-    super(INTERNAL);
+    super();
 
     // Not serialized.
     this.data = null;
-    this.index = 0;
-    this.pos = 0;
-    this.gen = 0;
 
     this.left = left || exports.NIL;
     this.right = right || exports.NIL;
+  }
+
+  type() {
+    return INTERNAL;
+  }
+
+  isInternal() {
+    return true;
   }
 
   hash(hash) {
@@ -228,8 +248,8 @@ class Internal extends Node {
 
   inspect() {
     return {
-      left: this.left.inspect(),
-      right: this.right.inspect()
+      left: this.left,
+      right: this.right
     };
   }
 
@@ -247,18 +267,23 @@ class Internal extends Node {
 
 class Leaf extends Node {
   constructor(leaf, key, value) {
-    super(LEAF);
-
-    // Not serialized.
-    this.index = 0;
-    this.pos = 0;
-    this.value = value || null;
+    super();
 
     this.data = leaf || null;
     this.key = key || null;
+
+    this.value = value || null; // Not serialized.
     this.vindex = 0;
     this.vpos = 0;
     this.vsize = 0;
+  }
+
+  type() {
+    return LEAF;
+  }
+
+  isLeaf() {
+    return true;
   }
 
   hash() {
@@ -340,10 +365,18 @@ class Leaf extends Node {
 
 class Hash extends Node {
   constructor(data, index, pos) {
-    super(HASH);
+    super();
     this.data = data || null;
     this.index = index || 0;
     this.pos = pos || 0;
+  }
+
+  type() {
+    return HASH;
+  }
+
+  isHash() {
+    return true;
   }
 
   hash(hash) {
