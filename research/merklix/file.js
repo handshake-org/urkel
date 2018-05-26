@@ -21,7 +21,7 @@ class File {
     this.fs = fs;
     this.index = index;
     this.fd = -1;
-    this.pos = 0;
+    this.size = 0;
     this.reads = 0;
   }
 
@@ -36,7 +36,7 @@ class File {
 
     const stat = await this.fs.fstat(this.fd);
 
-    this.pos = stat.size;
+    this.size = stat.size;
   }
 
   async close() {
@@ -46,7 +46,7 @@ class File {
     const fd = this.fd;
 
     this.fd = -1;
-    this.pos = 0;
+    this.size = 0;
     this.reads = 0;
 
     return this.fs.close(fd);
@@ -59,7 +59,7 @@ class File {
     const fd = this.fd;
 
     this.fd = -1;
-    this.pos = 0;
+    this.size = 0;
     this.reads = 0;
 
     this.fs.closeSync(fd);
@@ -76,7 +76,7 @@ class File {
     if (this.fd === -1)
       throw new Error('File already closed.');
 
-    if (size === this.pos)
+    if (size === this.size)
       return undefined;
 
     return this.fs.ftruncate(this.fd, size);
@@ -108,14 +108,14 @@ class File {
     if (this.fd === -1)
       throw new Error('File is closed.');
 
-    const pos = this.pos;
+    const pos = this.size;
 
     const w = await this.fs.write(this.fd, data, 0, data.length, null);
 
     if (w !== data.length)
       throw new IOError('write', this.index, pos, data.length);
 
-    this.pos += w;
+    this.size += w;
 
     return pos;
   }

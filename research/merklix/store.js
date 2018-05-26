@@ -74,11 +74,10 @@ class Store {
     this.readLock = Lock.create();
 
     this.wb = new WriteBuffer();
-    this.files = [];
+    this.files = new FileMap();
     this.current = null;
     this.state = new Meta();
     this.index = 0;
-    this.total = 0;
     this.rootCache = new Map();
     this.lastMeta = new Meta();
   }
@@ -185,21 +184,16 @@ class Store {
 
     const files = this.files;
 
-    this.wb.reset();
-    this.files = [];
+    this.wb = new WriteBuffer();
+    this.files = new FileMap();
     this.current = null;
     this.state = new Meta();
     this.index = 0;
-    this.total = 0;
     this.rootCache.clear();
     this.lastMeta = new Meta();
 
-    for (const file of files) {
-      if (!file)
-        continue;
-
+    for (const file of files.values())
       await file.close();
-    }
   }
 
   async destroy() {
@@ -245,10 +239,7 @@ class Store {
     if (index === 0 || index > this.index + 1)
       throw new Error('Invalid file index.');
 
-    while (index >= this.files.length)
-      this.files.push(null);
-
-    const file = this.files[index];
+    const file = this.files.get(index);
 
     if (file)
       return file;
@@ -269,7 +260,7 @@ class Store {
     if (this.index === 0)
       throw new Error('Store is closed.');
 
-    const cache = this.files[index];
+    const cache = this.files.get(index);
 
     if (cache)
       return cache;
@@ -280,13 +271,12 @@ class Store {
     await file.open(path, flags);
 
     // No race conditions.
-    assert(!this.files[index]);
+    assert(!this.files.has(index));
 
-    if (this.total >= MAX_OPEN_FILES)
+    if (this.files.size >= MAX_OPEN_FILES)
       await this.evict();
 
-    this.files[index] = file;
-    this.total += 1;
+    this.files.set(index, file);
 
     return file;
   }
@@ -297,7 +287,7 @@ class Store {
     if (this.index === 0)
       throw new Error('Store is closed.');
 
-    const file = this.files[index];
+    const file = this.files.get(index);
 
     if (!file)
       return undefined;
@@ -305,8 +295,7 @@ class Store {
     if (file.reads > 0)
       return undefined;
 
-    this.files[index] = null;
-    this.total -= 1;
+    this.files.delete(index);
 
     return file.close();
   }
@@ -317,11 +306,8 @@ class Store {
 
     let total = 0;
 
-    for (const file of this.files) {
-      if (!file)
-        continue;
-
-      if (file.index === this.index)
+    for (const [index, file] of this.files) {
+      if (index === this.index)
         continue;
 
       if (file.reads > 0)
@@ -335,18 +321,15 @@ class Store {
 
     let i = Math.random() * total | 0;
 
-    for (const file of this.files) {
-      if (!file)
-        continue;
-
-      if (file.index === this.index)
+    for (const [index, file] of this.files) {
+      if (index === this.index)
         continue;
 
       if (file.reads > 0)
         continue;
 
       if (i === 0) {
-        i = file.index;
+        i = index;
         break;
       }
 
@@ -369,7 +352,7 @@ class Store {
     if (this.index === 0)
       throw new Error('Store is closed.');
 
-    if (this.current.pos + data.length > MAX_FILE_SIZE) {
+    if (this.current.size + data.length > MAX_FILE_SIZE) {
       await this.current.sync();
       await this.closeFile(this.index);
       this.current = await this.openFile(this.index + 1, 'a+');
@@ -394,7 +377,7 @@ class Store {
   start() {
     assert(this.wb.written === 0);
     assert(this.wb.start === 0);
-    this.wb.offset = this.current.pos;
+    this.wb.offset = this.current.size;
     this.wb.index = this.current.index;
     return this;
   }
@@ -518,7 +501,7 @@ class Store {
 
       await file.open(path, 'r+');
 
-      let off = file.pos - (file.pos % META_SIZE);
+      let off = file.size - (file.size % META_SIZE);
 
       if (!slab)
         slab = Buffer.allocUnsafe(SLAB_SIZE);
@@ -915,6 +898,11 @@ class FileMap {
     }
 
     return false;
+  }
+
+  clear() {
+    this.items.length = 0;
+    this.size = 0;
   }
 
   [Symbol.iterator]() {
