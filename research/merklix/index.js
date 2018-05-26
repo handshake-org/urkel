@@ -19,6 +19,5 @@ exports.errors = require('./errors');
 exports.Merklix = require('./merklix');
 exports.nodes = require('./nodes');
 exports.proof = require('./proof');
+exports.Proof = exports.proof.Proof;
 exports.store = require('./store');
-
-module.exports = require('./merklix');

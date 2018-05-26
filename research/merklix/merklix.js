@@ -100,7 +100,7 @@ class Merklix {
     this.bits = bits;
     this.prefix = prefix || null;
     this.db = db || null;
-    this.store = new Store(prefix, hash, bits);
+    this.store = new Store(prefix, hash, bits, !db);
     this.originalRoot = this.hash.zero;
     this.root = NIL;
     this.cacheDepth = depth;
@@ -129,8 +129,12 @@ class Merklix {
     await this.store.open();
 
     // Try to retrieve best state.
-    if (!root && this.db)
-      root = await this.db.get(STATE_KEY);
+    if (!root) {
+      if (this.db)
+        root = await this.db.get(STATE_KEY);
+      else
+        root = await this.store.getRootHash();
+    }
 
     if (root) {
       this.root = await this.getHistory(root);
@@ -146,8 +150,10 @@ class Merklix {
   }
 
   async getRecord(root) {
-    if (!this.db)
-      throw new Error('Cannot get history without database.');
+    if (!this.db) {
+      const node = await this.store.getRoot(root);
+      return [node.index, node.pos];
+    }
 
     const raw = await this.db.get(root);
 
@@ -161,12 +167,10 @@ class Merklix {
     return fromRecord(raw);
   }
 
-  putRecord(batch, hash, index, pos) {
-    const raw = toRecord(index, pos);
-    batch.put(hash, raw);
-  }
+  putRecord(batch, root) {
+    assert(this.db);
+    assert(batch && typeof batch.put === 'function');
 
-  putRoot(batch, root) {
     if (root.isNull()) {
       batch.del(STATE_KEY);
       return;
@@ -175,8 +179,7 @@ class Merklix {
     const hash = root.hash(this.hash);
     const {index, pos} = root;
 
-    this.putRecord(batch, hash, index, pos);
-
+    batch.put(hash, toRecord(index, pos));
     batch.put(STATE_KEY, hash);
   }
 
@@ -488,22 +491,17 @@ class Merklix {
   }
 
   async commit(batch) {
-    if (this.db)
-      assert(batch && typeof batch.put === 'function');
-
     this.store.start();
 
     const root = this._commit(this.root, 0);
 
-    await this.store.commit();
+    await this.store.commit(root);
 
     this.root = root;
     this.originalRoot = root.hash(this.hash);
 
-    if (batch) {
-      assert(this.db);
-      this.putRoot(batch, root);
-    }
+    if (this.db && batch)
+      this.putRecord(batch, root);
 
     return this.originalRoot;
   }
@@ -652,24 +650,19 @@ class Merklix {
   }
 
   async compact(batch) {
-    if (this.db)
-      assert(batch && typeof batch.put === 'function');
-
     const Store = this.store.constructor;
     const prefix = randomPath(this.prefix);
     const {hash, bits} = this;
 
     const node = await this.getRoot();
 
-    const store = new Store(prefix, hash, bits);
+    const store = new Store(prefix, hash, bits, !this.db);
     await store.open();
     store.start();
 
     const root = await this._compact(node, store, 0);
 
-    assert(root.hash(this.ctx).equals(node.hash(this.ctx)));
-
-    await store.commit();
+    await store.commit(root);
     await store.close();
 
     // Need lock here.
@@ -678,10 +671,8 @@ class Merklix {
     await store.rename(this.prefix);
     await store.open();
 
-    if (batch) {
-      assert(this.db);
-      this.putRoot(batch, root);
-    }
+    if (this.db && batch)
+      this.putRecord(batch, root);
 
     this.store = store;
     this.root = root;
@@ -730,14 +721,6 @@ class Merklix {
     }
 
     throw new AssertionError('Unknown node.');
-  }
-
-  static get proof() {
-    return proof;
-  }
-
-  static get Proof() {
-    return Proof;
   }
 }
 

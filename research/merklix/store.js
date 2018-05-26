@@ -9,7 +9,9 @@
 const assert = require('assert');
 const Path = require('path');
 const fs = require('bfile');
+const {Lock, MapLock} = require('bmutex');
 const common = require('./common');
+const errors = require('./errors');
 const File = require('./file');
 const MFS = require('./mfs');
 const nodes = require('./nodes');
@@ -21,6 +23,10 @@ const {
   EMPTY,
   randomPath
 } = common;
+
+const {
+  MissingNodeError
+} = errors;
 
 const {
   decodeNode,
@@ -36,7 +42,7 @@ const MAX_FILE_SIZE = 0x7ffff000;
 const MAX_FILES = 0xffff;
 const MAX_OPEN_FILES = 32;
 const META_SIZE = 4 + 2 + 4 + 2 + 4 + 20;
-const META_MAGIC = 0x6d6b6c78; // "mklx"
+const META_MAGIC = 0x6d6b6c78;
 const READ_BUFFER = 1 << 20;
 const SLAB_SIZE = READ_BUFFER - (READ_BUFFER % META_SIZE);
 
@@ -45,24 +51,30 @@ const SLAB_SIZE = READ_BUFFER - (READ_BUFFER % META_SIZE);
  */
 
 class Store {
-  constructor(fs, prefix, hash, bits) {
+  constructor(fs, prefix, hash, bits, standalone = true) {
     assert(fs);
     assert(typeof prefix === 'string');
     assert(hash && typeof hash.digest === 'function');
     assert((bits >>> 0) === bits);
     assert(bits > 0 && (bits & 7) === 0);
+    assert(typeof standalone === 'boolean');
 
     this.fs = fs;
+    this.prefix = prefix;
     this.hash = ensureHash(hash);
     this.bits = bits;
+    this.standalone = standalone;
     this.nodeSize = Internal.getSize(hash, bits);
-    this.prefix = prefix;
     this.wb = new WriteBuffer();
     this.files = [];
     this.current = null;
     this.state = new Meta();
     this.index = 0;
     this.total = 0;
+    this.rootCache = new Map();
+    this.lastMeta = new Meta();
+    this.openLock = MapLock.create();
+    this.readLock = Lock.create();
   }
 
   name(index) {
@@ -106,7 +118,7 @@ class Store {
       const file = files[i];
 
       if (i > 0 && file.index !== files[i].index + 1)
-        throw new Error('Missing merklix tree files.');
+        throw new Error('Missing tree files.');
     }
 
     return files;
@@ -146,12 +158,17 @@ class Store {
 
     const index = await this.ensure();
 
-    // const state = await this.recoverState(index);
-    // this.state = state;
-    // this.index = state.metaIndex;
-
-    this.index = index || 1;
-    this.current = await this.openFile(this.index, 'a+');
+    if (this.standalone) {
+      const [state, meta] = await this.recoverState(index);
+      this.state = state;
+      this.index = state.metaIndex || 1;
+      this.lastMeta = meta;
+      this.current = await this.openFile(this.index, 'a+');
+      await this.getRoot();
+    } else {
+      this.index = index || 1;
+      this.current = await this.openFile(this.index, 'a+');
+    }
   }
 
   async close() {
@@ -165,6 +182,8 @@ class Store {
     this.state = new Meta();
     this.index = 0;
     this.total = 0;
+    this.rootCache.clear();
+    this.lastMeta = new Meta();
 
     for (const file of files) {
       if (!file)
@@ -208,6 +227,15 @@ class Store {
   }
 
   async openFile(index, flags) {
+    const unlock = await this.openLock(index);
+    try {
+      return await this._openFile(index, flags);
+    } finally {
+      unlock();
+    }
+  }
+
+  async _openFile(index, flags) {
     assert((index >>> 0) === index);
     assert(index !== 0);
     assert(typeof flags === 'string');
@@ -270,47 +298,6 @@ class Store {
     await this.closeFile(index);
 
     return this.fs.unlink(this.name(index));
-  }
-
-  async prune(max) {
-    assert((max >>> 0) === max);
-
-    if (this.index === 0)
-      throw new Error('Store is closed.');
-
-    for (let i = 0; i < this.files.length; i++) {
-      const file = this.files[i];
-
-      if (!file)
-        continue;
-
-      if (file.index === this.current.index)
-        continue;
-
-      await this.closeFile(file.index);
-    }
-
-    const files = await this.readdir();
-
-    for (const {path, index} of files) {
-      if (index > max)
-        continue;
-
-      await this.fs.unlink(path);
-    }
-  }
-
-  async advance() {
-    if (this.index === 0)
-      throw new Error('Store is closed.');
-
-    await this.current.sync();
-    await this.closeFile(this.index);
-
-    this.current = await this.openFile(this.index + 1, 'a+');
-    this.index += 1;
-
-    return this.index - 1;
   }
 
   evict() {
@@ -449,18 +436,29 @@ class Store {
       await this.write(chunk);
   }
 
-  async commit() {
-    this.writeMeta();
+  async commit(root) {
+    if (this.standalone)
+      this.writeMeta();
+
     await this.flush();
-    return this.sync();
+    await this.sync();
+
+    if (this.standalone) {
+      const hash = root.hash(this.hash);
+      if (!hash.equals(this.hash.zero)) {
+        const key = hash.toString('hex');
+        this.rootCache.set(key, root.toHash(this.hash));
+      }
+    }
   }
 
   writeMeta() {
-    if (this.wb.pos < this.nodeSize)
-      return;
+    assert(this.standalone);
 
-    this.state.rootIndex = this.wb.index;
-    this.state.rootPos = this.wb.pos - this.nodeSize;
+    if (this.wb.written >= this.nodeSize) {
+      this.state.rootIndex = this.wb.index;
+      this.state.rootPos = this.wb.pos - this.nodeSize;
+    }
 
     const padding = META_SIZE - (this.wb.pos % META_SIZE);
 
@@ -480,6 +478,7 @@ class Store {
   }
 
   parseMeta(data, off) {
+    assert(this.standalone);
     try {
       return Meta.read(data, off, this.hash);
     } catch (e) {
@@ -488,6 +487,7 @@ class Store {
   }
 
   async recoverState(index) {
+    assert(this.standalone);
     assert((index >>> 0) === index);
 
     if (this.index !== 0)
@@ -530,10 +530,11 @@ class Store {
             await file.truncate(off + META_SIZE);
             await file.close();
 
-            meta.metaIndex = index;
-            meta.metaPos = off;
+            const state = meta.clone();
+            state.metaIndex = index;
+            state.metaPos = off;
 
-            return meta;
+            return [state, meta];
           }
         }
       }
@@ -544,42 +545,92 @@ class Store {
       index -= 1;
     }
 
-    return new Meta(1, 0, 1, 0);
+    return [new Meta(), new Meta()];
   }
 
   async readMeta(index, pos) {
+    assert(this.standalone);
     const data = await this.read(index, pos, META_SIZE);
     return Meta.decode(data, this.hash);
   }
 
-  async readRoot(rootHash) {
+  async readRoot(index, pos) {
+    const unlock = await this.readLock();
+    try {
+      return await this._readRoot(index, pos);
+    } finally {
+      unlock();
+    }
+  }
+
+  async _readRoot(index, pos) {
+    assert(this.standalone);
+
+    const node = await this.readNode(index, pos);
+    const hash = node.hash(this.hash);
+
+    if (hash.equals(this.hash.zero))
+      return node;
+
+    const key = hash.toString('hex');
+
+    if (!this.rootCache.has(key))
+      this.rootCache.set(key, node.toHash(this.hash));
+
+    return node;
+  }
+
+  async getRoot(rootHash) {
+    const unlock = await this.readLock();
+    try {
+      return await this._getRoot(rootHash);
+    } finally {
+      unlock();
+    }
+  }
+
+  async _getRoot(rootHash) {
+    assert(this.standalone);
+
     if (this.index === 0)
       throw new Error('Store is closed.');
 
-    assert(!rootHash || Buffer.isBuffer(rootHash));
+    if (!rootHash) {
+      const {rootIndex, rootPos} = this.state;
 
-    if (rootHash && rootHash.equals(this.hash.zero))
+      if (rootIndex === 0)
+        return NIL;
+
+      return this._readRoot(rootIndex, rootPos);
+    }
+
+    assert(Buffer.isBuffer(rootHash));
+
+    if (rootHash.equals(this.hash.zero))
       return NIL;
 
-    let {metaIndex, metaPos} = this.state;
+    const key = rootHash.toString('hex');
+    const cached = this.rootCache.get(key);
+
+    if (cached)
+      return cached;
+
+    let {metaIndex, metaPos} = this.lastMeta;
 
     for (;;) {
-      if (metaIndex === 1 && metaPos === 0) {
-        if (rootHash)
-          throw new Error('Root not found.');
-
-        return NIL;
+      if (metaIndex === 0) {
+        throw new MissingNodeError({
+          rootHash: rootHash,
+          nodeHash: rootHash
+        });
       }
 
       const meta = await this.readMeta(metaIndex, metaPos);
       const {rootIndex, rootPos} = meta;
-
-      const node = await this.readNode(rootIndex, rootPos);
-
-      if (!rootHash)
-        return node;
-
+      const node = await this._readRoot(rootIndex, rootPos);
       const hash = node.hash(this.hash);
+
+      this.lastMeta = meta;
 
       if (hash.equals(rootHash))
         return node;
@@ -587,6 +638,11 @@ class Store {
       metaIndex = meta.metaIndex;
       metaPos = meta.metaPos;
     }
+  }
+
+  async getRootHash() {
+    const root = await this.getRoot();
+    return root.hash(this.hash);
   }
 }
 
@@ -596,10 +652,19 @@ class Store {
 
 class Meta {
   constructor(metaIndex, metaPos, rootIndex, rootPos) {
-    this.metaIndex = metaIndex || 1;
+    this.metaIndex = metaIndex || 0;
     this.metaPos = metaPos || 0;
-    this.rootIndex = rootIndex || 1;
+    this.rootIndex = rootIndex || 0;
     this.rootPos = rootPos || 0;
+  }
+
+  clone() {
+    const meta = new this.constructor();
+    meta.metaIndex = this.metaIndex;
+    meta.metaPos = this.metaPos;
+    meta.rootIndex = this.rootIndex;
+    meta.rootPos = this.rootPos;
+    return meta;
   }
 
   getSize() {
@@ -772,8 +837,8 @@ class WriteBuffer {
  */
 
 class FileStore extends Store {
-  constructor(prefix, hash, bits) {
-    super(fs, prefix, hash, bits);
+  constructor(prefix, hash, bits, standalone) {
+    super(fs, prefix, hash, bits, standalone);
   }
 }
 
@@ -782,8 +847,8 @@ class FileStore extends Store {
  */
 
 class MemoryStore extends Store {
-  constructor(prefix, hash, bits) {
-    super(new MFS(), prefix || '/store', hash, bits);
+  constructor(prefix, hash, bits, standalone) {
+    super(new MFS(), prefix || '/store', hash, bits, standalone);
   }
 }
 

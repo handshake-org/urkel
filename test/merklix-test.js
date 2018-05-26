@@ -8,8 +8,7 @@ const assert = require('./util/assert');
 const crypto = require('crypto');
 const DB = require('./util/db');
 const {sha1, sha256} = require('./util/util');
-const Merklix = require('../research/merklix');
-const {Proof} = Merklix;
+const {Merklix, Proof} = require('../research/merklix');
 
 const FOO1 = sha1.digest(Buffer.from('foo1'));
 const FOO2 = sha1.digest(Buffer.from('foo2'));
@@ -31,8 +30,8 @@ function reencode(tree, proof) {
   return Proof.decode(raw, tree.hash, tree.bits);
 }
 
-async function runTest(db) {
-  const tree = new Merklix(sha256, 160, null, db, 0);
+async function runTest(db, s) {
+  const tree = new Merklix(sha256, 160, null, s ? null : db, 0);
 
   await db.open();
   await tree.open();
@@ -190,8 +189,8 @@ async function runTest(db) {
   await db.close();
 }
 
-async function pummel(db) {
-  const tree = new Merklix(sha256, 160, null, db, 0);
+async function pummel(db, s) {
+  const tree = new Merklix(sha256, 160, null, s ? null : db, 0);
   const items = [];
   const set = new Set();
 
@@ -360,10 +359,18 @@ describe('Merklix', function() {
   this.timeout(5000);
 
   it('should test tree', async () => {
-    await runTest(new DB());
+    await runTest(new DB(), false);
+  });
+
+  it('should test tree standalone', async () => {
+    await runTest(new DB(), true);
   });
 
   it('should pummel tree', async () => {
-    await pummel(new DB());
+    await pummel(new DB(), false);
+  });
+
+  it('should pummel tree standalone', async () => {
+    await pummel(new DB(), true);
   });
 });

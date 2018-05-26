@@ -8,7 +8,7 @@ const crypto = require('crypto');
 const DB = require('../test/util/db');
 // const {sha256} = require('../test/util/util');
 const sha256 = require('bcrypto/lib/sha256');
-const Merklix = require('../research/merklix');
+const {Merklix} = require('../research/merklix');
 const {wait, memory, logMemory, createDB} = require('./util');
 
 const BLOCKS = +process.argv[3] || 10000;
