@@ -38,8 +38,12 @@ const {
  * Constants
  */
 
-const MAX_FILE_SIZE = 0x7ffff000;
-const MAX_FILES = 0xffff;
+// Max read size on linux, and lower than off_t max
+// (libuv will use a 32 bit off_t on 32 bit systems).
+const MAX_FILE_SIZE = 0x7ffff000; // File max = 2 GB
+const MAX_FILES = 0xffff; // DB max = 128 TB.
+// const MAX_FILES = 0xffffff; // DB max = 32.768 PB.
+// const MAX_FILES = 0xffffffff; // DB max = 8 EB.
 const MAX_OPEN_FILES = 32;
 const META_SIZE = 4 + 2 + 4 + 2 + 4 + 20;
 const META_MAGIC = 0x6d6b6c78;
@@ -144,7 +148,7 @@ class Store {
     if (this.index !== 0)
       throw new Error('Store already opened.');
 
-    await this.fs.mkdirp(this.prefix, 0o770);
+    await this.fs.mkdirp(this.prefix, 0o750);
 
     const files = await this.readdir();
 
@@ -327,7 +331,7 @@ class Store {
     }
 
     if (total === 0)
-      return false;
+      return undefined;
 
     let i = Math.random() * total | 0;
 
@@ -852,6 +856,96 @@ class WriteBuffer {
     this.reset();
 
     return chunks;
+  }
+}
+
+/**
+ * File Map
+ * Notion: a sparse array is faster than a hash table.
+ */
+
+class FileMap {
+  constructor() {
+    this.items = [];
+    this.size = 0;
+  }
+
+  has(index) {
+    return this.get(index) !== null;
+  }
+
+  get(index) {
+    assert(index < MAX_FILES);
+
+    if (index >= this.items.length)
+      return null;
+
+    const file = this.items[index];
+
+    if (!file)
+      return null;
+
+    return file;
+  }
+
+  set(index, file) {
+    assert(index < MAX_FILES);
+
+    while (index >= this.items.length)
+      this.items.push(null);
+
+    if (!this.items[index])
+      this.size += 1;
+
+    this.items[index] = file;
+
+    return this;
+  }
+
+  delete(index) {
+    assert(index < MAX_FILES);
+
+    if (index >= this.items.length)
+      return false;
+
+    if (this.items[index]) {
+      this.items[index] = null;
+      this.size -= 1;
+      return true;
+    }
+
+    return false;
+  }
+
+  [Symbol.iterator]() {
+    return this.entries();
+  }
+
+  *entries() {
+    for (let i = 0; i < this.items.length; i++) {
+      const file = this.items[i];
+
+      if (file)
+        yield [i, file];
+    }
+  }
+
+  *keys() {
+    for (let i = 0; i < this.items.length; i++) {
+      const file = this.items[i];
+
+      if (file)
+        yield i;
+    }
+  }
+
+  *values() {
+    for (let i = 0; i < this.items.length; i++) {
+      const file = this.items[i];
+
+      if (file)
+        yield file;
+    }
   }
 }
 

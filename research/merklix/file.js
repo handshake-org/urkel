@@ -32,7 +32,7 @@ class File {
     if (this.fd !== -1)
       throw new Error('File already open.');
 
-    this.fd = await this.fs.open(path, flags, 0o660);
+    this.fd = await this.fs.open(path, flags, 0o640);
 
     const stat = await this.fs.fstat(this.fd);
 
