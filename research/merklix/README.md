@@ -319,6 +319,11 @@ a parent database can be achieved by fsyncing every write and inserting the
 best root hash and file position into something like leveldb (once the fsync
 has completed).
 
+That said, the module can also operate in "standalone" mode, where a metadata
+root is written with a 20 byte checksum on every commit. This gives full crash
+consistency as the database will always parse back to the last intact metadata
+root on boot.
+
 ### Collision Attacks
 
 It is possible for someone to grind a key to create bit collisions. Currently,
