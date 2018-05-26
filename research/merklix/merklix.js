@@ -151,7 +151,7 @@ class Merklix {
 
   async getRecord(root) {
     if (!this.db) {
-      const node = await this.store.getRoot(root);
+      const node = await this.store.getHistory(root);
       return [node.index, node.pos];
     }
 
@@ -491,8 +491,6 @@ class Merklix {
   }
 
   async commit(batch) {
-    this.store.start();
-
     const root = this._commit(this.root, 0);
 
     await this.store.commit(root);
@@ -507,6 +505,9 @@ class Merklix {
   }
 
   _commit(node, depth) {
+    // if (this.store.needsFlush())
+    //   await this.store.flush();
+
     switch (node.type()) {
       case NULL: {
         assert(node.index === 0);
@@ -658,7 +659,6 @@ class Merklix {
 
     const store = new Store(prefix, hash, bits, !this.db);
     await store.open();
-    store.start();
 
     const root = await this._compact(node, store, 0);
 
@@ -679,10 +679,8 @@ class Merklix {
   }
 
   async _compact(node, store, depth) {
-    if (this.store.wb.written > (100 << 20)) {
+    if (store.needsFlush())
       await store.flush();
-      store.start();
-    }
 
     switch (node.type()) {
       case NULL: {

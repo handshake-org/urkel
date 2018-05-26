@@ -25,14 +25,14 @@ class File {
     this.reads = 0;
   }
 
-  async open(name, flags) {
-    assert(typeof name === 'string');
+  async open(path, flags) {
+    assert(typeof path === 'string');
     assert(typeof flags === 'string');
 
     if (this.fd !== -1)
       throw new Error('File already open.');
 
-    this.fd = await this.fs.open(name, flags, 0o660);
+    this.fd = await this.fs.open(path, flags, 0o660);
 
     const stat = await this.fs.fstat(this.fd);
 
