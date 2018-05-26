@@ -1,5 +1,7 @@
 'use strict';
 
+const {performance} = require('perf_hooks');
+
 function mb(num) {
   return Math.floor(num / (1 << 20));
 }
@@ -63,7 +65,22 @@ function createDB(cacheSize, compression) {
   });
 }
 
+function now() {
+  return performance.now() >>> 0;
+}
+
+function bench(time) {
+  if (time) {
+    const [hi, lo] = process.hrtime(time);
+    return (hi * 1000 + lo / 1e6).toFixed(2);
+  }
+
+  return process.hrtime();
+}
+
 exports.memory = memory;
 exports.logMemory = logMemory;
 exports.wait = wait;
 exports.createDB = createDB;
+exports.now = now;
+exports.bench = bench;

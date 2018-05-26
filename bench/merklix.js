@@ -5,25 +5,41 @@
 
 const assert = require('assert');
 const crypto = require('crypto');
-const DB = require('../test/util/db');
-// const {sha256} = require('../test/util/util');
 const sha256 = require('bcrypto/lib/sha256');
+const DB = require('../test/util/db');
 const {Merklix} = require('../research/merklix');
-const {wait, memory, logMemory, createDB} = require('./util');
+const util = require('./util');
+
+const {
+  memory,
+  logMemory,
+  createDB
+} = util;
 
 const BLOCKS = +process.argv[3] || 10000;
 const PER_BLOCK = +process.argv[4] || 500;
 const INTERVAL = +process.argv[5] || 88;
 const RATE = Math.floor(BLOCKS / 20);
 const TOTAL = BLOCKS * PER_BLOCK;
-const FILE = __dirname + '/merklixdb';
+const FILE = `${__dirname}/merklixdb`;
+
+async function commit(tree, db) {
+  if (!db)
+    return tree.commit();
+
+  const b = db.batch();
+  const r = await tree.commit(b);
+  await b.write();
+  return r;
+}
 
 async function stress(prefix, db) {
   const tree = new Merklix(sha256, 160, prefix, db, 4);
-  const pairs = [];
   const keys = [];
 
-  await db.open();
+  if (db)
+    await db.open();
+
   await tree.open();
 
   console.log(
@@ -32,6 +48,8 @@ async function stress(prefix, db) {
     PER_BLOCK);
 
   for (let i = 0; i < BLOCKS; i++) {
+    const pairs = [];
+
     let last = null;
 
     for (let j = 0; j < PER_BLOCK; j++) {
@@ -43,27 +61,25 @@ async function stress(prefix, db) {
       last = key;
     }
 
-    const now = Date.now();
+    const now = util.now();
 
     for (const [key, value] of pairs)
       await tree.insert(key, value);
 
     tree.rootHash();
 
-    console.log('Insertion: %d', Date.now() - now);
+    console.log('Insertion: %d', util.now() - now);
 
     pairs.length = 0;
 
     if (i && (i % INTERVAL) === 0) {
       memory();
 
-      const now = Date.now();
+      const now = util.now();
 
-      const b = db.batch();
-      await tree.commit(b);
-      await b.write();
+      await commit(tree, db);
 
-      console.log('Commit: %d', Date.now() - now);
+      console.log('Commit: %d', util.now() - now);
 
       logMemory();
 
@@ -87,14 +103,16 @@ async function stress(prefix, db) {
   }
 
   await tree.close();
-  await db.close();
+
+  if (db)
+    await db.close();
 }
 
 async function doProof(tree, i, key) {
-  const now = Date.now();
+  const now = util.now();
   const proof = await tree.prove(key);
 
-  console.log('Proof %d time: %d.', i, Date.now() - now);
+  console.log('Proof %d time: %d.', i, util.now() - now);
 
   let size = 0;
   for (const node of proof.nodes)
@@ -121,7 +139,9 @@ async function bench(prefix, db) {
   const tree = new Merklix(sha256, 160, prefix, db);
   const items = [];
 
-  await db.open();
+  if (db)
+    await db.open();
+
   await tree.open();
 
   for (let i = 0; i < 100000; i++) {
@@ -133,74 +153,68 @@ async function bench(prefix, db) {
   }
 
   {
-    const now = Date.now();
+    const now = util.now();
 
     for (const [key, value] of items)
       await tree.insert(key, value);
 
-    console.log('Insert: %d.', Date.now() - now);
+    console.log('Insert: %d.', util.now() - now);
   }
 
   {
-    const now = Date.now();
+    const now = util.now();
 
     for (const [key] of items)
       await tree.get(key);
 
-    console.log('Get (cached): %d.', Date.now() - now);
+    console.log('Get (cached): %d.', util.now() - now);
   }
 
   {
-    const now = Date.now();
+    const now = util.now();
 
-    const b = db.batch();
-    tree.commit(b);
-    await b.write();
+    await commit(tree, db);
 
-    console.log('Commit: %d.', Date.now() - now);
+    console.log('Commit: %d.', util.now() - now);
   }
 
   await tree.close();
   await tree.open();
 
   {
-    const now = Date.now();
+    const now = util.now();
 
     for (const [key] of items)
       await tree.get(key);
 
-    console.log('Get (uncached): %d.', Date.now() - now);
+    console.log('Get (uncached): %d.', util.now() - now);
   }
 
   {
-    const now = Date.now();
+    const now = util.now();
 
     for (const [i, [key]] of items.entries()) {
       if (i & 1)
         await tree.remove(key);
     }
 
-    console.log('Remove: %d.', Date.now() - now);
+    console.log('Remove: %d.', util.now() - now);
   }
 
   {
-    const now = Date.now();
+    const now = util.now();
 
-    const b = db.batch();
-    tree.commit(b);
-    await b.write();
+    await commit(tree, db);
 
-    console.log('Commit: %d.', Date.now() - now);
+    console.log('Commit: %d.', util.now() - now);
   }
 
   {
-    const now = Date.now();
+    const now = util.now();
 
-    const b = db.batch();
-    tree.commit(b);
-    await b.write();
+    await commit(tree, db);
 
-    console.log('Commit (nothing): %d.', Date.now() - now);
+    console.log('Commit (nothing): %d.', util.now() - now);
   }
 
   await tree.close();
@@ -211,17 +225,19 @@ async function bench(prefix, db) {
 
     const [key] = items[items.length - 100];
 
-    const now1 = Date.now();
+    const now1 = util.now();
     const proof = await tree.prove(key);
-    console.log('Proof: %d.', Date.now() - now1);
+    console.log('Proof: %d.', util.now() - now1);
 
-    const now2 = Date.now();
+    const now2 = util.now();
     tree.verify(root, key, proof);
-    console.log('Verify: %d.', Date.now() - now2);
+    console.log('Verify: %d.', util.now() - now2);
   }
 
   await tree.close();
-  await db.close();
+
+  if (db)
+    await db.close();
 }
 
 (async () => {
@@ -234,7 +250,7 @@ async function bench(prefix, db) {
 
   if (process.argv[2] === 'stress') {
     console.log('Stress testing...');
-    await stress(null, new DB(true));
+    await stress(FILE, null);
     return;
   }
 
