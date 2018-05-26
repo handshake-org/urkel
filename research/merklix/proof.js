@@ -15,20 +15,63 @@ const {
   hasBit,
   setBit,
   hashInternal,
-  hashLeaf
+  hashLeaf,
+  hashValue
 } = common;
 
 /*
  * Constants
  */
 
+const TYPE_EXISTS = 0;
+const TYPE_DEADEND = 1;
+const TYPE_COLLISION = 2;
+const TYPE_UNKNOWN = 3;
+
 const PROOF_OK = 0;
 const PROOF_HASH_MISMATCH = 1;
-const PROOF_MALFORMED_NODE = 2;
-const PROOF_UNEXPECTED_NODE = 3;
-const PROOF_EARLY_END = 4;
-const PROOF_NO_RESULT = 5;
-const PROOF_UNKNOWN_ERROR = 6;
+const PROOF_SAME_KEY = 2;
+const PROOF_UNKNOWN_ERROR = 3;
+
+/**
+ * Proof types.
+ * @enum {Number}
+ */
+
+const types = {
+  TYPE_EXISTS,
+  TYPE_DEADEND,
+  TYPE_COLLISION,
+  TYPE_UNKNOWN
+};
+
+/**
+ * Proof types (strings).
+ * @const {String[]}
+ * @default
+ */
+
+const typesByVal = [
+  'TYPE_EXISTS',
+  'TYPE_DEADEND',
+  'TYPE_COLLISION',
+  'TYPE_UNKNOWN'
+];
+
+/**
+ * Get proof type as a string.
+ * @param {Number} value
+ * @returns {String}
+ */
+
+function type(value) {
+  assert((value & 0xff) === value);
+
+  if (value >= typesByVal.length)
+    value = TYPE_UNKNOWN;
+
+  return typesByVal[value];
+}
 
 /**
  * Verification error codes.
@@ -38,10 +81,7 @@ const PROOF_UNKNOWN_ERROR = 6;
 const codes = {
   PROOF_OK,
   PROOF_HASH_MISMATCH,
-  PROOF_MALFORMED_NODE,
-  PROOF_UNEXPECTED_NODE,
-  PROOF_EARLY_END,
-  PROOF_NO_RESULT,
+  PROOF_SAME_KEY,
   PROOF_UNKNOWN_ERROR
 };
 
@@ -54,10 +94,7 @@ const codes = {
 const codesByVal = [
   'PROOF_OK',
   'PROOF_HASH_MISMATCH',
-  'PROOF_MALFORMED_NODE',
-  'PROOF_UNEXPECTED_NODE',
-  'PROOF_EARLY_END',
-  'PROOF_NO_RESULT',
+  'PROOF_SAME_KEY',
   'PROOF_UNKNOWN_ERROR'
 ];
 
@@ -85,36 +122,35 @@ async function prove(tree, root, key) {
   assert(tree.isHash(root));
   assert(tree.isKey(key));
 
-  const nodes = [];
+  const {hash, store, bits} = tree;
+  const proof = new Proof();
 
   let node = await tree.getRoot(root);
   let depth = 0;
-  let k = null;
-  let v = null;
 
   // Traverse bits left to right.
   for (;;) {
     // Empty (sub)tree.
-    if (node.isNull()) {
-      nodes.push(node.hash(tree.hash));
+    if (node.isNull())
       break;
-    }
 
     // Leaf node.
     if (node.isLeaf()) {
-      nodes.push(node.hash(tree.hash));
+      const value = await node.getValue(store);
 
-      if (!key.equals(node.key))
-        k = node.key;
-
-      v = await node.getValue(tree.store);
+      if (node.key.equals(key)) {
+        proof.value = value;
+      } else {
+        proof.key = node.key;
+        proof.hash = hash.digest(value);
+      }
 
       break;
     }
 
-    if (depth === tree.bits) {
+    if (depth === bits) {
       throw new MissingNodeError({
-        rootHash: root.hash(tree.hash),
+        rootHash: root.hash(hash),
         key,
         depth
       });
@@ -124,17 +160,19 @@ async function prove(tree, root, key) {
 
     // Internal node.
     if (hasBit(key, depth)) {
-      nodes.push(node.left.hash(tree.hash));
-      node = await node.getRight(tree.store);
+      const h = node.left.hash(hash);
+      proof.nodes.push(h);
+      node = await node.getRight(store);
     } else {
-      nodes.push(node.right.hash(tree.hash));
-      node = await node.getLeft(tree.store);
+      const h = node.right.hash(hash);
+      proof.nodes.push(h);
+      node = await node.getLeft(store);
     }
 
     depth += 1;
   }
 
-  return new Proof(nodes, k, v);
+  return proof;
 }
 
 function verify(hash, bits, root, key, proof) {
@@ -146,25 +184,35 @@ function verify(hash, bits, root, key, proof) {
   assert(root.length === hash.size);
   assert(key.length === (bits >>> 3));
   assert(proof instanceof Proof);
+  assert(proof.nodes.length <= bits);
 
   hash = ensureHash(hash);
 
-  const nodes = proof.nodes;
+  let leaf = null;
 
-  if (nodes.length === 0)
-    return [PROOF_EARLY_END, null];
+  // Re-create the leaf.
+  switch (proof.type) {
+    case TYPE_EXISTS:
+      leaf = hashValue(hash, key, proof.value);
+      break;
+    case TYPE_DEADEND:
+      leaf = hash.zero;
+      break;
+    case TYPE_COLLISION:
+      if (proof.key.equals(key))
+        return [PROOF_SAME_KEY, null];
+      leaf = hashLeaf(hash, proof.key, proof.hash);
+      break;
+  }
 
-  if (nodes.length > bits)
-    return [PROOF_MALFORMED_NODE, null];
-
-  const leaf = nodes[nodes.length - 1];
+  assert(leaf);
 
   let next = leaf;
-  let depth = nodes.length - 2;
+  let depth = proof.nodes.length - 1;
 
   // Traverse bits right to left.
   while (depth >= 0) {
-    const node = nodes[depth];
+    const node = proof.nodes[depth];
 
     if (hasBit(key, depth))
       next = hashInternal(hash, node, next);
@@ -177,47 +225,6 @@ function verify(hash, bits, root, key, proof) {
   if (!next.equals(root))
     return [PROOF_HASH_MISMATCH, null];
 
-  // Two types of NX proofs.
-
-  // Type 1: Non-existent leaf.
-  if (leaf.equals(hash.zero)) {
-    if (proof.key)
-      return [PROOF_UNEXPECTED_NODE, null];
-
-    if (proof.value)
-      return [PROOF_UNEXPECTED_NODE, null];
-
-    return [PROOF_OK, null];
-  }
-
-  // Type 2: Prefix collision.
-  // We have to provide the full preimage
-  // to prove we're a leaf, and also that
-  // we are indeed a different key.
-  if (proof.key) {
-    if (!proof.value)
-      return [PROOF_UNEXPECTED_NODE, null];
-
-    if (proof.key.equals(key))
-      return [PROOF_UNEXPECTED_NODE, null];
-
-    const h = hashLeaf(hash, proof.key, proof.value);
-
-    if (!h.equals(leaf))
-      return [PROOF_HASH_MISMATCH, null];
-
-    return [PROOF_OK, null];
-  }
-
-  // Otherwise, we should have a value.
-  if (!proof.value)
-    return [PROOF_NO_RESULT, null];
-
-  const h = hashLeaf(hash, key, proof.value);
-
-  if (!h.equals(leaf))
-    return [PROOF_HASH_MISMATCH, null];
-
   return [PROOF_OK, proof.value];
 }
 
@@ -226,42 +233,42 @@ function verify(hash, bits, root, key, proof) {
  */
 
 class Proof {
-  constructor(nodes, key, value) {
+  constructor() {
     this.nodes = [];
-    this.key = null;
     this.value = null;
-    this.from(nodes, key, value);
+    this.key = null;
+    this.hash = null;
   }
 
-  from(nodes, key, value) {
-    if (nodes != null) {
-      assert(Array.isArray(nodes));
-      this.nodes = nodes;
+  get type() {
+    if (this.value) {
+      assert(this.value.length <= 0xffff);
+      assert(!this.key);
+      assert(!this.hash);
+      return TYPE_EXISTS;
     }
 
-    if (key != null) {
-      assert(Buffer.isBuffer(key));
-      this.key = key;
+    if (this.key) {
+      assert(this.hash);
+      assert(!this.value);
+      return TYPE_COLLISION;
     }
 
-    if (value != null) {
-      assert(Buffer.isBuffer(value));
-      this.value = value;
-    }
-
-    return this;
+    return TYPE_DEADEND;
   }
 
   getSize(hash, bits) {
     assert(hash && typeof hash.digest === 'function');
     assert((bits >>> 0) === bits);
     assert(bits > 0 && (bits & 7) === 0);
+    assert(this.nodes.length <= bits);
+    assert(bits < (1 << 14));
 
     hash = ensureHash(hash);
 
     let size = 0;
 
-    size += 1;
+    size += 2;
     size += (this.nodes.length + 7) / 8 | 0;
 
     for (const node of this.nodes) {
@@ -269,13 +276,20 @@ class Proof {
         size += node.length;
     }
 
-    size += 2;
-
-    if (this.key)
-      size += bits >>> 3;
-
-    if (this.value)
-      size += this.value.length;
+    switch (this.type) {
+      case TYPE_EXISTS:
+        size += 2;
+        size += this.value.length;
+        break;
+      case TYPE_DEADEND:
+        break;
+      case TYPE_COLLISION:
+        assert(this.key.length === (bits >>> 3));
+        assert(this.hash.length === hash.size);
+        size += bits >>> 3;
+        size += hash.size;
+        break;
+    }
 
     return size;
   }
@@ -291,13 +305,10 @@ class Proof {
 
     let pos = off;
 
-    assert(this.nodes.length > 0);
-    assert(this.nodes.length <= bits);
-    assert(bits <= 256);
+    let field = this.type << 14;
+    field |= this.nodes.length;
 
-    data[pos] = this.nodes.length - 1;
-
-    pos += 1;
+    pos = data.writeUInt16LE(field, pos, true);
 
     data.fill(0x00, pos, pos + bsize);
 
@@ -307,30 +318,23 @@ class Proof {
       const node = this.nodes[i];
 
       if (node.equals(hash.zero))
-        setBit(data, 8 + i);
+        setBit(data, 16 + i);
       else
         pos += node.copy(data, pos);
     }
 
-    let field = 0;
-
-    if (this.key)
-      field |= 1 << 15;
-
-    if (this.value) {
-      // 16kb max
-      assert(this.value.length < (1 << 14));
-      field |= 1 << 14;
-      field |= this.value.length;
+    switch (this.type) {
+      case TYPE_EXISTS:
+        pos = data.writeUInt16LE(field, pos);
+        pos += this.value.copy(data, pos);
+        break;
+      case TYPE_DEADEND:
+        break;
+      case TYPE_COLLISION:
+        pos += this.key.copy(data, pos);
+        pos += this.hash.copy(data, pos);
+        break;
     }
-
-    pos = data.writeUInt16LE(field, pos);
-
-    if (this.key)
-      pos += this.key.copy(data, pos);
-
-    if (this.value)
-      pos += this.value.copy(data, pos);
 
     assert((pos - off) === size);
 
@@ -343,23 +347,32 @@ class Proof {
     assert(hash && typeof hash.digest === 'function');
     assert((bits >>> 0) === bits);
     assert(bits > 0 && (bits & 7) === 0);
+    assert(bits < (1 << 14));
 
     hash = ensureHash(hash);
 
     let pos = off;
+    let count = 0;
 
-    assert(pos + 1 <= data.length);
+    assert(pos + 2 <= data.length);
 
-    const count = data[pos] + 1;
+    const field = data.readUInt16LE(pos, true);
+    pos += 2;
+
+    const type = field >>> 14;
+    const count = field & ~(3 << 14);
+
+    if (count > bits)
+      throw new Error('Proof too large.');
+
     const bsize = (count + 7) / 8 | 0;
 
-    pos += 1;
+    assert(pos + bsize <= data.length);
+
     pos += bsize;
 
-    assert(pos <= data.length);
-
     for (let i = 0; i < count; i++) {
-      if (hasBit(data, 8 + i)) {
+      if (hasBit(data, 16 + i)) {
         this.nodes.push(hash.zero);
       } else {
         const h = copy(data, pos, hash.size);
@@ -368,21 +381,35 @@ class Proof {
       }
     }
 
-    assert(pos + 2 <= data.length);
+    switch (type) {
+      case TYPE_EXISTS: {
+        assert(pos + 2 <= data.length);
 
-    const field = data.readUInt16LE(pos, true);
-    pos += 2;
+        const size = data.readUInt16LE(pos, true);
+        pos += 2;
 
-    if (field & (1 << 15)) {
-      const size = bits >>> 3;
-      this.key = copy(data, pos, size);
-      pos += size;
-    }
+        this.value = copy(data, pos, size);
+        pos += size;
 
-    if (field & (1 << 14)) {
-      const size = field & ((1 << 14) - 1);
-      this.value = copy(data, pos, size);
-      pos += size;
+        break;
+      }
+      case TYPE_DEADEND: {
+        break;
+      }
+      case TYPE_COLLISION: {
+        this.key = copy(data, pos, bits >>> 3);
+        pos += bits >>> 3;
+        this.hash = copy(data, pos, hash.size);
+        pos += hash.size;
+        break;
+      }
+      case TYPE_UNKNOWN: {
+        throw new Error('Invalid type.');
+      }
+      default: {
+        assert(false);
+        break;
+      }
     }
 
     return pos;
@@ -420,6 +447,9 @@ function copy(data, pos, size) {
  * Expose
  */
 
+exports.types = types;
+exports.typesByVal = typesByVal;
+exports.type = type;
 exports.codes = codes;
 exports.codesByVal = codesByVal;
 exports.code = code;

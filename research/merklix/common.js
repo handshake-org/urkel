@@ -12,8 +12,8 @@ const assert = require('assert');
  * Constants
  */
 
-const INTERNAL_PREFIX = Buffer.from([0x00]);
-const LEAF_PREFIX = Buffer.from([0x01]);
+const INTERNAL_PREFIX = Buffer.from([0x01]);
+const LEAF_PREFIX = Buffer.from([0x00]);
 const EMPTY = Buffer.alloc(0);
 
 /*
@@ -60,13 +60,18 @@ function hashInternal(hash, left, right) {
   return ctx.final();
 }
 
-function hashLeaf(hash, key, value) {
+function hashLeaf(hash, key, valueHash) {
   const ctx = hash.ctx;
   ctx.init();
   ctx.update(LEAF_PREFIX);
   ctx.update(key);
-  ctx.update(value);
+  ctx.update(valueHash);
   return ctx.final();
+}
+
+function hashValue(hash, key, value) {
+  const valueHash = hash.digest(value);
+  return hashLeaf(hash, key, valueHash);
 }
 
 function parseU32(name) {
@@ -158,6 +163,7 @@ exports.hasBit = hasBit;
 exports.setBit = setBit;
 exports.hashInternal = hashInternal;
 exports.hashLeaf = hashLeaf;
+exports.hashValue = hashValue;
 exports.parseU32 = parseU32;
 exports.serializeU32 = serializeU32;
 exports.fromRecord = fromRecord;

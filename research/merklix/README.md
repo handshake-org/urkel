@@ -183,14 +183,14 @@ And we're back to where we started.
 ### Proofs
 
 The proof is a standard merkle proof, with some extra gotchas.  The actual hash
-at a leaf is the computed as `HASH(key | value)`. It is important to have the
-full key as part of the preimage. If a non-existence proof is necessary, we
-need to send the full preimage to prove that we are a leaf, and that we're also
-a different key that may have a colliding path with whatever key a peer is
-trying to get a proof for. On the other hand, if the key path stops at one of
-the "dead-end" nodes, we do not have to send any preimage! Even better, if
-there are any "dead-end" nodes up the subtree when creating a proof, we can
-compress them since they are redundant zero-hashes.
+at a leaf is the computed as `HASH(0x00 | key | HASH(value))`. It is important
+to have the full key as part of the preimage. If a non-existence proof is
+necessary, we need to send the full preimage to prove that we are a leaf, and
+that we're also a different key that may have a colliding path with whatever
+key a peer is trying to get a proof for. On the other hand, if the key path
+stops at one of the "dead-end" nodes, we do not have to send any preimage! Even
+better, if there are any "dead-end" nodes up the subtree when creating a proof,
+we can compress them since they are redundant zero-hashes.
 
 Say we were asked to prove the existence or non-existence of key `1110`, with
 our original tree of:
@@ -269,8 +269,8 @@ Tree:
        b    c
 ```
 
-We need only send the preimage for `a` (the value `a` itself and its key
-`0000`), sending it's hash would be a redundant 32 bytes.
+We need only send the preimage for `a` (the value hash of `a` itself and its
+key `0000`), sending it's hash would be a redundant 32 bytes.
 
 ---
 

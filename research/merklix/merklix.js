@@ -20,7 +20,7 @@ const store = require('./store');
 const {
   ensureHash,
   hasBit,
-  hashLeaf,
+  hashValue,
   fromRecord,
   toRecord,
   randomPath
@@ -118,8 +118,8 @@ class Merklix {
     return hash.length === this.hash.size;
   }
 
-  hashLeaf(key, value) {
-    return hashLeaf(this.hash, key, value);
+  hashValue(key, value) {
+    return hashValue(this.hash, key, value);
   }
 
   async open(root) {
@@ -276,7 +276,7 @@ class Merklix {
   }
 
   async _insert(root, key, value) {
-    const leaf = this.hashLeaf(key, value);
+    const leaf = this.hashValue(key, value);
     const nodes = [];
 
     let node = root;
