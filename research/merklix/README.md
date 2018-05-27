@@ -234,7 +234,7 @@ Tree:
         /  \
       (d)  /\
           /  \
-        (/\) (x)
+        (/\) [x]
         /  \
        b    c
 ```
@@ -260,7 +260,7 @@ Tree:
        R
       / \
      /   \
-   (a)  (/\)
+   [a]  (/\)
         /  \
        d   /\
           /  \
@@ -271,6 +271,33 @@ Tree:
 
 We need only send the preimage for `a` (the value hash of `a` itself and its
 key `0000`), sending it's hash would be a redundant 32 bytes.
+
+Other than that, an existence proof is pretty straight forward. Proving leaf
+`c` (`1101`), we would send the leaf hashes of `a`, and `d`, with one dead-end
+node, and finally the sibling of `c`: `b`. The leaf hash of `c` is not
+transmitted, only it's value (`c`). The full preimage is know on the other
+side, allowing us to compute `HASH(0x00 | 1101 | HASH("c"))` to get the leaf
+hash.
+
+```
+Map:
+  0000 = a
+  1100 = b
+  1101 = c
+  1000 = d
+
+Tree:
+       R
+      / \
+     /   \
+   (a)   /\
+        /  \
+      (d)  /\
+          /  \
+         /\  (x) <-- compressed
+        /  \
+      (b)  [c]
+```
 
 ---
 
