@@ -341,15 +341,22 @@ struct {
 The actual leaf data is stored at `value_position` in `value_file`.
 
 This module will store the tree in a series of append-only files. A
-particularly large write buffer is used to batch all insertions. Atomicity with
-a parent database can be achieved by fsyncing every write and inserting the
-best root hash and file position into something like leveldb (once the fsync
-has completed).
+particularly large write buffer is used to batch all insertions as a single
+`write(2)` call. Atomicity with a parent database can be achieved by fsyncing
+every write and inserting the best root hash and file position into something
+like leveldb (once the fsync has completed).
 
 That said, the module can also operate in "standalone" mode, where a metadata
 root is written with a 20 byte checksum on every commit. This gives full crash
 consistency as the database will always parse back to the last intact metadata
 root on boot.
+
+### Compaction
+
+The database can be compacted periodically, though it's a rather expensive
+operation. In our benchmarks, 1,136 commits of 44,000 300-byte leaves each
+(50,000,000 leaves total), resulted in a database size of 49GB. This could
+likely be compacted down to 15-20GB.
 
 ### Collision Attacks
 
