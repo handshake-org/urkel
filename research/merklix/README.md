@@ -123,10 +123,60 @@ Tree:
        b    c
 ```
 
+The growing behavior makes for some strange structures when compared to typical
+merkle trees, for example, adding value `e` with a key of `1001` would result
+in a tree of:
+
+```
+Map:
+  0000 = a
+  1100 = b
+  1101 = c
+  1000 = d
+  1001 = e
+
+Tree:
+           R (depth=0)
+          / \
+         /   \
+        a    /\
+            /  \
+           /   /\
+          /   /  \
+         /   /\   x
+        /   /  \
+       /   b    c (depth=4)
+      /\
+     /  \
+    /\   x
+   /  \
+  d    e (depth=4)
+```
+
 ### Removal
 
 Removal is tricky when we have "dead-end" nodes in our subtree. We need to
 revert all of the subtree growing we just did.
+
+```
+Map:
+  0000 = a
+  1100 = b
+  1101 = c
+  1000 = d
+
+Tree:
+       R
+      / \
+     /   \
+    a    /\
+        /  \
+       d   /\
+          /  \
+         /\   x
+        /  \
+       b    c
+```
 
 If we were to remove leaf `d` from the above tree, we _must_ replace it with a
 "dead-end". The general rule is: if the target node's sibling is an internal
@@ -220,6 +270,8 @@ parent hash of `b` and `c`, and finally a dead-end node `x`. The fact that a
 final leaf node was a dead-end node proves non-existence.
 
 ```
+Proving non-existence for: 1110
+
 Map:
   0000 = a
   1100 = b
@@ -250,6 +302,8 @@ proving that node `a` is indeed a leaf, but that it has a different key than
 the one we're looking for.
 
 ```
+Proving non-existence for: 0100
+
 Map:
   0000 = a
   1100 = b
@@ -275,11 +329,13 @@ key `0000`), sending it's hash would be a redundant 32 bytes.
 Other than that, an existence proof is pretty straight forward. Proving leaf
 `c` (`1101`), we would send the leaf hashes of `a`, and `d`, with one dead-end
 node, and finally the sibling of `c`: `b`. The leaf hash of `c` is not
-transmitted, only it's value (`c`). The full preimage is know on the other
+transmitted, only it's value (`c`). The full preimage is known on the other
 side, allowing us to compute `HASH(0x00 | 1101 | HASH("c"))` to get the leaf
 hash.
 
 ```
+Proving existence for: 1101 (c)
+
 Map:
   0000 = a
   1100 = b
@@ -341,8 +397,8 @@ struct {
 The actual leaf data is stored at `value_position` in `value_file`.
 
 This module will store the tree in a series of append-only files. A
-particularly large write buffer is used to batch all insertions as a single
-`write(2)` call. Atomicity with a parent database can be achieved by fsyncing
+particularly large write buffer is used to batch all insertions with a minimal
+amount of writes. Atomicity with a parent database can be achieved by fsyncing
 every write and inserting the best root hash and file position into something
 like leveldb (once the fsync has completed).
 
