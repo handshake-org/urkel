@@ -25,7 +25,7 @@ function ensureHash(hash) {
   assert(typeof hash.name === 'string');
   assert(typeof hash.digest === 'function');
 
-  if (hash.size != null)
+  if (hash.multi)
     return hash;
 
   hash.id = hash.name.toLowerCase();
@@ -33,6 +33,15 @@ function ensureHash(hash) {
   hash.bits = hash.size * 8;
   hash.zero = Buffer.alloc(hash.size, 0x00);
   hash.ctx = hash.hash();
+  hash.multi = function multi(one, two, three, a, b) {
+    const ctx = hash.ctx;
+    ctx.init(a);
+    ctx.update(one);
+    ctx.update(two);
+    if (three)
+      ctx.update(three);
+    return ctx.final(b);
+  };
 
   ({ __proto__: hash });
 
@@ -52,21 +61,11 @@ function setBit(key, index) {
 }
 
 function hashInternal(hash, left, right) {
-  const ctx = hash.ctx;
-  ctx.init();
-  ctx.update(INTERNAL_PREFIX);
-  ctx.update(left);
-  ctx.update(right);
-  return ctx.final();
+  return hash.multi(INTERNAL_PREFIX, left, right);
 }
 
 function hashLeaf(hash, key, valueHash) {
-  const ctx = hash.ctx;
-  ctx.init();
-  ctx.update(LEAF_PREFIX);
-  ctx.update(key);
-  ctx.update(valueHash);
-  return ctx.final();
+  return hash.multi(LEAF_PREFIX, key, valueHash);
 }
 
 function hashValue(hash, key, value) {
