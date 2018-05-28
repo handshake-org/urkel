@@ -16,7 +16,9 @@ const {
   setBit,
   hashInternal,
   hashLeaf,
-  hashValue
+  hashValue,
+  readU16,
+  writeU16
 } = common;
 
 /*
@@ -308,7 +310,7 @@ class Proof {
     let field = this.type << 14;
     field |= this.nodes.length;
 
-    pos = data.writeUInt16LE(field, pos, true);
+    pos = writeU16(data, field, pos);
 
     data.fill(0x00, pos, pos + bsize);
 
@@ -318,14 +320,14 @@ class Proof {
       const node = this.nodes[i];
 
       if (node.equals(hash.zero))
-        setBit(data, 16 + i);
+        setBit(data, (off * 8) + 16 + i);
       else
         pos += node.copy(data, pos);
     }
 
     switch (this.type) {
       case TYPE_EXISTS:
-        pos = data.writeUInt16LE(field, pos);
+        pos = writeU16(data, this.value.length, pos);
         pos += this.value.copy(data, pos);
         break;
       case TYPE_DEADEND:
@@ -341,6 +343,15 @@ class Proof {
     return pos;
   }
 
+  writeBW(bw, hash, bits) {
+    assert(bw && typeof bw.writeU8 === 'function');
+    if (bw.data)
+      bw.offset = this.write(bw.data, bw.offset, hash, bits);
+    else
+      bw.writeBytes(this.encode(hash, bits));
+    return bw;
+  }
+
   read(data, off, hash, bits) {
     assert(Buffer.isBuffer(data));
     assert((off >>> 0) === off);
@@ -352,11 +363,10 @@ class Proof {
     hash = ensureHash(hash);
 
     let pos = off;
-    let count = 0;
 
     assert(pos + 2 <= data.length);
 
-    const field = data.readUInt16LE(pos, true);
+    const field = readU16(data, pos);
     pos += 2;
 
     const type = field >>> 14;
@@ -372,7 +382,7 @@ class Proof {
     pos += bsize;
 
     for (let i = 0; i < count; i++) {
-      if (hasBit(data, 16 + i)) {
+      if (hasBit(data, (off * 8) + 16 + i)) {
         this.nodes.push(hash.zero);
       } else {
         const h = copy(data, pos, hash.size);
@@ -385,7 +395,7 @@ class Proof {
       case TYPE_EXISTS: {
         assert(pos + 2 <= data.length);
 
-        const size = data.readUInt16LE(pos, true);
+        const size = readU16(data, pos);
         pos += 2;
 
         this.value = copy(data, pos, size);
@@ -415,6 +425,12 @@ class Proof {
     return pos;
   }
 
+  readBR(br, hash, bits) {
+    assert(br && typeof br.readU8 === 'function');
+    br.offset = this.read(br.data, br.offset, hash, bits);
+    return this;
+  }
+
   encode(hash, bits) {
     const size = this.getSize(hash, bits);
     const data = Buffer.allocUnsafe(size);
@@ -425,6 +441,10 @@ class Proof {
   decode(data, hash, bits) {
     this.read(data, 0, hash, bits);
     return this;
+  }
+
+  static readBR(br, hash, bits) {
+    return new this().readBR(br, hash, bits);
   }
 
   static decode(data, hash, bits) {

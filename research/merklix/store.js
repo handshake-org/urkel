@@ -21,7 +21,11 @@ const {
   parseU32,
   serializeU32,
   EMPTY,
-  randomPath
+  randomPath,
+  readU16,
+  readU32,
+  writeU16,
+  writeU32
 } = common;
 
 const {
@@ -455,6 +459,9 @@ class Store {
   writeMeta() {
     assert(this.standalone);
 
+    if (this.wb.written < this.nodeSize)
+      return;
+
     if (this.wb.written >= this.nodeSize) {
       this.state.rootIndex = this.wb.index;
       this.state.rootPos = this.wb.pos - this.nodeSize;
@@ -521,7 +528,7 @@ class Store {
           size -= META_SIZE;
           off -= META_SIZE;
 
-          if (data.readUInt32LE(size, true) !== META_MAGIC)
+          if (readU32(data, size) !== META_MAGIC)
             continue;
 
           const meta = this.parseMeta(data, size);
@@ -699,11 +706,11 @@ class Meta {
     assert(hash && typeof hash.digest === 'function');
     assert(off + META_SIZE <= data.length);
 
-    data.writeUInt32LE(META_MAGIC, off + 0, true);
-    data.writeUInt16LE(this.metaIndex, off + 4, true);
-    data.writeUInt32LE(this.metaPos, off + 6, true);
-    data.writeUInt16LE(this.rootIndex, off + 10, true);
-    data.writeUInt32LE(this.rootPos, off + 12, true);
+    writeU32(data, META_MAGIC, off + 0, true);
+    writeU16(data, this.metaIndex, off + 4, true);
+    writeU32(data, this.metaPos, off + 6, true);
+    writeU16(data, this.rootIndex, off + 10, true);
+    writeU32(data, this.rootPos, off + 12, true);
 
     const preimage = data.slice(off, off + 16);
     const digest = hash.digest(preimage);
@@ -727,7 +734,7 @@ class Meta {
     assert(hash && typeof hash.digest === 'function');
     assert(off + META_SIZE <= data.length);
 
-    const magic = data.readUInt32LE(off + 0, true);
+    const magic = readU32(data, off + 0);
 
     if (magic !== META_MAGIC)
       throw new Error('Invalid magic number.');
@@ -743,10 +750,10 @@ class Meta {
     if (!checksum.equals(expect))
       throw new Error('Invalid metadata checksum.');
 
-    this.metaIndex = data.readUInt16LE(off + 4, true);
-    this.metaPos = data.readUInt32LE(off + 6, true);
-    this.rootIndex = data.readUInt16LE(off + 10, true);
-    this.rootPos = data.readUInt32LE(off + 12, true);
+    this.metaIndex = readU16(data, off + 4);
+    this.metaPos = readU32(data, off + 6);
+    this.rootIndex = readU16(data, off + 10);
+    this.rootPos = readU32(data, off + 12);
 
     return this;
   }

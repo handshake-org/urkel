@@ -9,8 +9,16 @@
 'use strict';
 
 const assert = require('assert');
-const {hashInternal} = require('./common');
+const common = require('./common');
 const {AssertionError} = require('./errors');
+
+const {
+  hashInternal,
+  readU16,
+  readU32,
+  writeU16,
+  writeU32
+} = common;
 
 /*
  * Constants
@@ -181,12 +189,12 @@ class Internal extends Node {
     off += 1;
 
     off += left.copy(data, off);
-    off = data.writeUInt16LE(this.left.index, off);
-    off = data.writeUInt32LE(this.left.pos, off);
+    off = writeU16(data, this.left.index, off);
+    off = writeU32(data, this.left.pos, off);
 
     off += right.copy(data, off);
-    off = data.writeUInt16LE(this.right.index, off);
-    off = data.writeUInt32LE(this.right.pos, off);
+    off = writeU16(data, this.right.index, off);
+    off = writeU32(data, this.right.pos, off);
 
     return off;
   }
@@ -203,10 +211,10 @@ class Internal extends Node {
     off += hash.size;
 
     if (!left.equals(hash.zero)) {
-      const leftIndex = data.readUInt16LE(off, true);
+      const leftIndex = readU16(data, off);
       off += 2;
 
-      const leftPos = data.readUInt32LE(off, true);
+      const leftPos = readU32(data, off);
       off += 4;
 
       this.left = new Hash(left, leftIndex, leftPos);
@@ -218,10 +226,10 @@ class Internal extends Node {
     off += hash.size;
 
     if (!right.equals(hash.zero)) {
-      const rightIndex = data.readUInt16LE(off, true);
+      const rightIndex = readU16(data, off);
       off += 2;
 
-      const rightPos = data.readUInt32LE(off, true);
+      const rightPos = readU32(data, off);
       off += 4;
 
       this.right = new Hash(right, rightIndex, rightPos);
@@ -302,9 +310,9 @@ class Leaf extends Node {
     off += this.data.copy(data, off);
     off += this.key.copy(data, off);
 
-    off = data.writeUInt16LE(this.vindex, off, true);
-    off = data.writeUInt32LE(this.vpos, off, true);
-    off = data.writeUInt32LE(this.vsize, off, true);
+    off = writeU16(data, this.vindex, off);
+    off = writeU32(data, this.vpos, off);
+    off = writeU32(data, this.vsize, off);
 
     data.fill(0x00, off, off + left);
     off += left;
@@ -326,13 +334,13 @@ class Leaf extends Node {
     this.key = data.slice(off, off + (bits >>> 3));
     off += bits >>> 3;
 
-    this.vindex = data.readUInt16LE(off, true);
+    this.vindex = readU16(data, off);
     off += 2;
 
-    this.vpos = data.readUInt32LE(off, true);
+    this.vpos = readU32(data, off);
     off += 4;
 
-    this.vsize = data.readUInt32LE(off, true);
+    this.vsize = readU32(data, off);
     off += 4;
 
     return this;

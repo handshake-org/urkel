@@ -554,6 +554,19 @@ class Merklix {
     throw new AssertionError('Unknown node.');
   }
 
+  snapshotSync() {
+    const {hash, bits, prefix, db, cacheDepth} = this;
+    const tree = new this.constructor(hash, bits, prefix, db, cacheDepth);
+
+    tree.store = this.store;
+    tree.originalRoot = this.originalRoot;
+
+    if (!this.root.isNull())
+      tree.root = this.root.toHash(this.hash);
+
+    return tree;
+  }
+
   async snapshot(root) {
     if (root == null)
       root = this.originalRoot;

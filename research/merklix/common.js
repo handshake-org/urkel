@@ -152,6 +152,40 @@ function randomPath(path) {
   return `${path}.${randomString()}~`;
 }
 
+function readU16(data, off) {
+  const first = data[off];
+  const last = data[off + 1];
+
+  return first + last * 2 ** 8;
+}
+
+function readU32(data, off) {
+  const first = data[off];
+  const last = data[off + 3];
+
+  return first +
+    data[++off] * 2 ** 8 +
+    data[++off] * 2 ** 16 +
+    last * 2 ** 24;
+}
+
+function writeU16(dst, num, off) {
+  dst[off++] = num;
+  dst[off++] = (num >>> 8);
+  return off;
+}
+
+function writeU32(dst, num, off) {
+  dst[off++] = num;
+  num = num >>> 8;
+  dst[off++] = num;
+  num = num >>> 8;
+  dst[off++] = num;
+  num = num >>> 8;
+  dst[off++] = num;
+  return off;
+}
+
 /*
  * Expose
  */
@@ -169,3 +203,7 @@ exports.fromRecord = fromRecord;
 exports.toRecord = toRecord;
 exports.randomString = randomString;
 exports.randomPath = randomPath;
+exports.readU16 = readU16;
+exports.readU32 = readU32;
+exports.writeU16 = writeU16;
+exports.writeU32 = writeU32;
