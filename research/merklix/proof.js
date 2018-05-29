@@ -443,6 +443,16 @@ class Proof {
     return this;
   }
 
+  toJSON() {
+    return {
+      type: typesByVal[this.type],
+      nodes: this.nodes.map(n => n.toString('hex')),
+      value: this.value ? this.value.toString('hex') : undefined,
+      key: this.key ? this.key.toString('hex') : undefined,
+      hash: this.hash ? this.hash.toString('hex') : undefined
+    };
+  }
+
   static readBR(br, hash, bits) {
     return new this().readBR(br, hash, bits);
   }

@@ -211,8 +211,6 @@ async function pummel(db) {
 
   await tree.open();
 
-  let b = null;
-
   while (set.size < 10000) {
     const key = crypto.randomBytes(tree.bits >>> 3);
     const value = crypto.randomBytes(random(1, 100));
