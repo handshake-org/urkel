@@ -277,7 +277,7 @@ class Leaf extends Node {
   constructor(leaf, key, value) {
     super();
 
-    this.data = leaf || null;
+    this.data = leaf || null; // Not serialized.
     this.key = key || null;
 
     this.value = value || null; // Not serialized.
@@ -294,7 +294,7 @@ class Leaf extends Node {
     return true;
   }
 
-  hash() {
+  hash(hash) {
     assert(this.data);
     return this.data;
   }
@@ -307,7 +307,6 @@ class Leaf extends Node {
     data[off] = LEAF;
     off += 1;
 
-    off += this.data.copy(data, off);
     off += this.key.copy(data, off);
 
     off = writeU16(data, this.vindex, off);
@@ -327,9 +326,6 @@ class Leaf extends Node {
     assert(data[0] === LEAF);
 
     let off = 1;
-
-    this.data = data.slice(off, off + hash.size);
-    off += hash.size;
 
     this.key = data.slice(off, off + (bits >>> 3));
     off += bits >>> 3;
@@ -363,7 +359,7 @@ class Leaf extends Node {
     assert(hash && typeof hash.digest === 'function');
     assert((bits >>> 0) === bits);
     assert(bits > 0 && (bits & 7) === 0);
-    return 1 + hash.size + (bits >>> 3) + 2 + 4 + 4;
+    return 1 + (bits >>> 3) + 2 + 4 + 4;
   }
 }
 
