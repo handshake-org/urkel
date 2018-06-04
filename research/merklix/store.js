@@ -50,7 +50,7 @@ const MAX_FILES = 0xffff; // DB max = 128 TB.
 // const MAX_FILES = 0xffffffff; // DB max = 8 EB.
 const MAX_OPEN_FILES = 32;
 const META_SIZE = 4 + 2 + 4 + 2 + 4 + 20;
-const META_MAGIC = 0x6d6b6c78;
+const META_MAGIC = 0x6d726b6c;
 const WRITE_BUFFER = 120 << 20;
 const READ_BUFFER = 1 << 20;
 const SLAB_SIZE = READ_BUFFER - (READ_BUFFER % META_SIZE);
@@ -126,7 +126,7 @@ class Store {
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
 
-      if (i > 0 && file.index !== files[i].index + 1)
+      if (i > 0 && file.index !== files[i - 1].index + 1)
         throw new Error('Missing tree files.');
     }
 
