@@ -29,6 +29,7 @@ const {
 } = common;
 
 const {
+  AssertionError,
   MissingNodeError
 } = errors;
 
@@ -304,7 +305,7 @@ class Store {
     return file.close();
   }
 
-  async evict() {
+  evictIndex() {
     if (this.index === 0)
       throw new Error('Store is closed.');
 
@@ -321,7 +322,7 @@ class Store {
     }
 
     if (total === 0)
-      return undefined;
+      return -1;
 
     let i = Math.random() * total | 0;
 
@@ -332,15 +333,22 @@ class Store {
       if (file.reads > 0)
         continue;
 
-      if (i === 0) {
-        i = index;
-        break;
-      }
+      if (i === 0)
+        return index;
 
       i -= 1;
     }
 
-    return this.closeFile(i);
+    throw new AssertionError('Eviction index not found.');
+  }
+
+  async evict() {
+    const index = this.evictIndex();
+
+    if (index === -1)
+      return undefined;
+
+    return this.closeFile(index);
   }
 
   async read(index, pos, size) {
