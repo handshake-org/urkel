@@ -247,9 +247,23 @@ class Internal extends Node {
     return this.left;
   }
 
+  getLeftSync(store) {
+    if (this.left.isHash())
+      this.left = this.left.resolveSync(store);
+
+    return this.left;
+  }
+
   async getRight(store) {
     if (this.right.isHash())
       this.right = await this.right.resolve(store);
+
+    return this.right;
+  }
+
+  getRightSync(store) {
+    if (this.right.isHash())
+      this.right = this.right.resolveSync(store);
 
     return this.right;
   }
@@ -390,6 +404,12 @@ class Hash extends Node {
 
   async resolve(store) {
     const node = await store.readNode(this.index, this.pos);
+    node.data = this.data;
+    return node;
+  }
+
+  resolveSync(store) {
+    const node = store.readNodeSync(this.index, this.pos);
     node.data = this.data;
     return node;
   }

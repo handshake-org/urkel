@@ -286,6 +286,34 @@ class Store {
     return file;
   }
 
+  openFileSync(index, flags) {
+    assert((index >>> 0) === index);
+    assert(typeof flags === 'string');
+
+    if (this.index === 0)
+      throw new Error('Store is closed.');
+
+    if (index === 0 || index > this.index + 1)
+      throw new Error('Invalid file index.');
+
+    const cache = this.files.get(index);
+
+    if (cache)
+      return cache;
+
+    const file = new File(this.fs, index);
+    const path = this.path(index);
+
+    file.openSync(path, flags);
+
+    if (this.files.size >= MAX_OPEN_FILES)
+      this.evictSync();
+
+    this.files.set(index, file);
+
+    return file;
+  }
+
   async closeFile(index) {
     assert((index >>> 0) === index);
 
@@ -303,6 +331,25 @@ class Store {
     this.files.delete(index);
 
     return file.close();
+  }
+
+  closeFileSync(index) {
+    assert((index >>> 0) === index);
+
+    if (this.index === 0)
+      throw new Error('Store is closed.');
+
+    const file = this.files.get(index);
+
+    if (!file)
+      return;
+
+    if (file.reads > 0)
+      return;
+
+    this.files.delete(index);
+
+    file.closeSync();
   }
 
   evictIndex() {
@@ -351,6 +398,15 @@ class Store {
     return this.closeFile(index);
   }
 
+  evictSync() {
+    const index = this.evictIndex();
+
+    if (index === -1)
+      return;
+
+    this.closeFileSync(index);
+  }
+
   async read(index, pos, size) {
     if (this.index === 0)
       throw new Error('Store is closed.');
@@ -358,6 +414,15 @@ class Store {
     const file = await this.openFile(index, 'r');
 
     return file.read(pos, size);
+  }
+
+  readSync(index, pos, size) {
+    if (this.index === 0)
+      throw new Error('Store is closed.');
+
+    const file = this.openFileSync(index, 'r');
+
+    return file.readSync(pos, size);
   }
 
   async write(data) {
@@ -383,6 +448,11 @@ class Store {
 
   async readNode(index, pos) {
     const data = await this.read(index, pos, this.nodeSize);
+    return decodeNode(data, this.hash, this.bits, index, pos);
+  }
+
+  readNodeSync(index, pos) {
+    const data = this.readSync(index, pos, this.nodeSize);
     return decodeNode(data, this.hash, this.bits, index, pos);
   }
 

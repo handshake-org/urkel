@@ -39,6 +39,20 @@ class File {
     this.size = stat.size;
   }
 
+  openSync(path, flags) {
+    assert(typeof path === 'string');
+    assert(typeof flags === 'string');
+
+    if (this.fd !== -1)
+      throw new Error('File already open.');
+
+    this.fd = this.fs.openSync(path, flags, 0o640);
+
+    const stat = this.fs.fstatSync(this.fd);
+
+    this.size = stat.size;
+  }
+
   async close() {
     if (this.fd === -1)
       throw new Error('File already closed.');
@@ -72,6 +86,13 @@ class File {
     return this.fs.fsync(this.fd);
   }
 
+  syncSync() {
+    if (this.fd === -1)
+      throw new Error('File already closed.');
+
+    this.fs.fsyncSync(this.fd);
+  }
+
   async truncate(size) {
     if (this.fd === -1)
       throw new Error('File already closed.');
@@ -80,6 +101,16 @@ class File {
       return undefined;
 
     return this.fs.ftruncate(this.fd, size);
+  }
+
+  truncateSync(size) {
+    if (this.fd === -1)
+      throw new Error('File already closed.');
+
+    if (size === this.size)
+      return undefined;
+
+    this.fs.ftruncateSync(this.fd, size);
   }
 
   async read(pos, size) {
@@ -104,6 +135,19 @@ class File {
     return buf;
   }
 
+  readSync(pos, size) {
+    if (this.fd === -1)
+      throw new Error('File is closed.');
+
+    const buf = Buffer.allocUnsafe(size);
+    const r = this.fs.readSync(this.fd, buf, 0, size, pos);
+
+    if (r !== size)
+      throw new IOError('read', this.index, pos, size);
+
+    return buf;
+  }
+
   async write(data) {
     if (this.fd === -1)
       throw new Error('File is closed.');
@@ -120,6 +164,22 @@ class File {
     return pos;
   }
 
+  writeSync(data) {
+    if (this.fd === -1)
+      throw new Error('File is closed.');
+
+    const pos = this.size;
+
+    const w = this.fs.writeSync(this.fd, data, 0, data.length, null);
+
+    if (w !== data.length)
+      throw new IOError('write', this.index, pos, data.length);
+
+    this.size += w;
+
+    return pos;
+  }
+
   async rawRead(pos, size, out) {
     assert(size <= out.length);
 
@@ -127,6 +187,20 @@ class File {
       throw new Error('File is closed.');
 
     const r = await this.fs.read(this.fd, out, 0, size, pos);
+
+    if (r !== size)
+      throw new IOError('read', this.index, pos, size);
+
+    return out;
+  }
+
+  rawReadSync(pos, size, out) {
+    assert(size <= out.length);
+
+    if (this.fd === -1)
+      throw new Error('File is closed.');
+
+    const r = this.fs.readSync(this.fd, out, 0, size, pos);
 
     if (r !== size)
       throw new IOError('read', this.index, pos, size);
