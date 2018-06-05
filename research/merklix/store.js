@@ -571,6 +571,43 @@ class Store {
     }
   }
 
+  async findMeta(file, slab) {
+    assert(this.standalone);
+    assert(file instanceof File);
+    assert(Buffer.isBuffer(slab));
+
+    let off = file.size - (file.size % META_SIZE);
+
+    while (off >= META_SIZE) {
+      let pos = 0;
+      let size = off;
+
+      if (off >= slab.length) {
+        pos = off - slab.length;
+        size = slab.length;
+      }
+
+      const data = await file.rawRead(pos, size, slab);
+
+      while (size >= META_SIZE) {
+        size -= META_SIZE;
+        off -= META_SIZE;
+
+        if (readU32(data, size) !== META_MAGIC)
+          continue;
+
+        const meta = this.parseMeta(data, size);
+
+        if (meta) {
+          await file.truncate(off + META_SIZE);
+          return [off, meta];
+        }
+      }
+    }
+
+    return [-1, null];
+  }
+
   async recoverState(index) {
     assert(this.standalone);
     assert((index >>> 0) === index);
@@ -578,53 +615,34 @@ class Store {
     if (this.index !== 0)
       throw new Error('Store is open.');
 
-    let slab = null;
+    if (index === 0)
+      return [new Meta(), new Meta()];
+
+    const slab = Buffer.allocUnsafe(SLAB_SIZE);
 
     while (index >= 1) {
       const path = this.path(index);
       const file = new File(this.fs, index);
 
+      let off = -1;
+      let meta = null;
+
       await file.open(path, 'r+');
 
-      let off = file.size - (file.size % META_SIZE);
-
-      if (!slab)
-        slab = Buffer.allocUnsafe(SLAB_SIZE);
-
-      while (off >= META_SIZE) {
-        let pos = 0;
-        let size = off;
-
-        if (off >= slab.length) {
-          pos = off - slab.length;
-          size = slab.length;
-        }
-
-        const data = await file.rawRead(pos, size, slab);
-
-        while (size >= META_SIZE) {
-          size -= META_SIZE;
-          off -= META_SIZE;
-
-          if (readU32(data, size) !== META_MAGIC)
-            continue;
-
-          const meta = this.parseMeta(data, size);
-
-          if (meta) {
-            await file.truncate(off + META_SIZE);
-            await file.close();
-
-            const state = meta.clone();
-            state.metaIndex = index;
-            state.metaPos = off;
-
-            return [state, meta];
-          }
-        }
+      try {
+        [off, meta] = await this.findMeta(file, slab);
+      } finally {
+        await file.close();
       }
 
-      await file.close();
+      if (meta) {
+        const state = meta.clone();
+        state.metaIndex = index;
+        state.metaPos = off;
+
+        return [state, meta];
+      }
+
       await this.fs.unlink(path);
 
       index -= 1;
