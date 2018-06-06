@@ -5,10 +5,10 @@ const UglifyJsPlugin = require('uglifyjs-webpack-plugin');
 module.exports = {
   target: 'web',
   entry: {
-    'btrie': './lib/btrie'
+    'urkel': './lib/urkel'
   },
   output: {
-    library: 'btrie',
+    library: 'urkel',
     libraryTarget: 'umd',
     path: __dirname,
     filename: '[name].js'

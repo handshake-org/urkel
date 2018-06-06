@@ -7,7 +7,7 @@ const assert = require('assert');
 const crypto = require('crypto');
 const sha256 = require('bcrypto/lib/sha256');
 const DB = require('../test/util/db');
-const {Merklix} = require('../research/merklix');
+const {Tree} = require('../');
 const util = require('./util');
 
 const {
@@ -21,7 +21,7 @@ const PER_BLOCK = +process.argv[4] || 500;
 const INTERVAL = +process.argv[5] || 88;
 const RATE = Math.floor(BLOCKS / 20);
 const TOTAL = BLOCKS * PER_BLOCK;
-const FILE = `${__dirname}/merklixdb`;
+const FILE = `${__dirname}/treedb`;
 
 async function commit(tree, db) {
   if (!db)
@@ -34,7 +34,7 @@ async function commit(tree, db) {
 }
 
 async function stress(prefix, db) {
-  const tree = new Merklix(sha256, 160, prefix, db, 4);
+  const tree = new Tree(sha256, 160, prefix, db, 4);
   const keys = [];
 
   if (db)
@@ -136,7 +136,7 @@ async function doProof(tree, i, key) {
 }
 
 async function bench(prefix, db) {
-  const tree = new Merklix(sha256, 160, prefix, db);
+  const tree = new Tree(sha256, 160, prefix, db);
   const items = [];
 
   if (db)
@@ -254,7 +254,7 @@ async function bench(prefix, db) {
     return;
   }
 
-  console.log('Running Merklix bench...');
+  console.log('Running Tree bench...');
   await bench(null, new DB());
 })().catch((err) => {
   console.error(err.stack);

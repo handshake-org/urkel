@@ -8,7 +8,7 @@ const assert = require('./util/assert');
 const crypto = require('crypto');
 const DB = require('./util/db');
 const {sha1, sha256} = require('./util/util');
-const {Merklix, Proof} = require('../research/merklix');
+const {Tree, Proof} = require('../');
 
 const FOO1 = sha1.digest(Buffer.from('foo1'));
 const FOO2 = sha1.digest(Buffer.from('foo2'));
@@ -51,7 +51,7 @@ async function compact(tree, db) {
 }
 
 async function runTest(db) {
-  const tree = new Merklix(sha256, 160, null, db, 0);
+  const tree = new Tree(sha256, 160, null, db, 0);
 
   if (db)
     await db.open();
@@ -202,7 +202,7 @@ async function runTest(db) {
 }
 
 async function pummel(db) {
-  const tree = new Merklix(sha256, 160, null, db, 0);
+  const tree = new Tree(sha256, 160, null, db, 0);
   const items = [];
   const set = new Set();
 
@@ -382,7 +382,7 @@ async function pummel(db) {
     await db.close();
 }
 
-describe('Merklix', function() {
+describe('Tree', function() {
   this.timeout(5000);
 
   it('should test tree', async () => {

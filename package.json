@@ -1,22 +1,22 @@
 {
-  "name": "btrie",
+  "name": "urkel",
   "version": "0.1.0",
-  "description": "Merkelized Patricia Trie (not a b-trie)",
+  "description": "Cryptographically provable database",
   "keywords": [
     "net",
     "tcp"
   ],
   "license": "MIT",
-  "repository": "git://github.com/bcoin-org/btrie.git",
-  "homepage": "https://github.com/bcoin-org/btrie",
+  "repository": "git://github.com/bcoin-org/urkel.git",
+  "homepage": "https://github.com/bcoin-org/urkel",
   "bugs": {
-    "url": "https://github.com/bcoin-org/btrie/issues"
+    "url": "https://github.com/bcoin-org/urkel/issues"
   },
   "author": "Christopher Jeffrey <chjjeffrey@gmail.com>",
-  "main": "./lib/btrie.js",
+  "main": "./lib/urkel.js",
   "scripts": {
-    "browserify": "browserify -s btrie lib/btrie.js | uglifyjs -c > btrie.js",
-    "clean": "rm -f btrie.js",
+    "browserify": "browserify -s urkel lib/urkel.js | uglifyjs -c > urkel.js",
+    "clean": "rm -f urkel.js",
     "lint": "eslint lib/ research/ bench/ test/ || exit 0",
     "test": "mocha --reporter spec test/*-test.js",
     "test-file": "mocha --reporter spec",
