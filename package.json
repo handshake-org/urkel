@@ -1,6 +1,6 @@
 {
   "name": "urkel",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "Cryptographically provable database",
   "keywords": [
     "net",
@@ -23,7 +23,8 @@
     "webpack": "webpack --config webpack.config.js"
   },
   "dependencies": {
-    "bufio": "~0.1.0"
+    "bfile": "~0.1.0"
+    "bmutex": "~0.1.0"
   },
   "devDependencies": {
     "babelify": "^8.0.0",
