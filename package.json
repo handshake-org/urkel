@@ -23,7 +23,7 @@
     "webpack": "webpack --config webpack.config.js"
   },
   "dependencies": {
-    "bfile": "~0.1.0"
+    "bfile": "~0.1.0",
     "bmutex": "~0.1.0"
   },
   "devDependencies": {
