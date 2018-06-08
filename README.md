@@ -1,4 +1,4 @@
-# urkel
+# Urkel Tree
 
 An optimized and cryptographically provable database.
 

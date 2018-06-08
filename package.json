@@ -1,6 +1,6 @@
 {
   "name": "urkel",
-  "version": "0.0.0",
+  "version": "0.2.0",
   "description": "Cryptographically provable database",
   "keywords": [
     "net",
@@ -20,7 +20,7 @@
     "lint": "eslint lib/ research/ bench/ test/ || exit 0",
     "test": "mocha --reporter spec test/*-test.js",
     "test-file": "mocha --reporter spec",
-    "webpack": "webpack --config webpack.config.js"
+    "webpack": "webpack --mode production --config webpack.config.js"
   },
   "dependencies": {
     "bfile": "~0.1.0",
@@ -31,16 +31,17 @@
     "babel-core": "^6.26.3",
     "babel-loader": "^7.1.4",
     "babel-preset-env": "^1.7.0",
-    "blru": "~0.0.1",
+    "blru": "~0.1.0",
     "browserify": "^16.2.2",
     "eslint": "^4.19.1",
     "mocha": "^5.2.0",
     "uglifyjs-webpack-plugin": "^1.2.5",
     "uglify-es": "^3.3.9",
-    "webpack": "^4.11.1"
+    "webpack": "^4.11.1",
+    "webpack-cli": "^3.0.3"
   },
   "engines": {
-    "node": ">=7.6.0"
+    "node": ">=8.0.0"
   },
   "browserify": {
     "transform": [

@@ -40,11 +40,22 @@ class SHA1 {
     assert(Buffer.isBuffer(right) && right.length === 20);
     return new SHA1().init().update(left).update(right).final();
   }
+
+  static multi(one, two, three) {
+    const ctx = new SHA1();
+    ctx.init();
+    ctx.update(one);
+    ctx.update(two);
+    if (three)
+      ctx.update(three);
+    return ctx.final();
+  }
 }
 
 SHA1.id = 'sha1';
 SHA1.size = 20;
 SHA1.bits = 160;
+SHA1.blockSize = 64;
 SHA1.zero = Buffer.alloc(20, 0x00);
 SHA1.ctx = new SHA1();
 
@@ -85,11 +96,22 @@ class SHA256 {
     assert(Buffer.isBuffer(right) && right.length === 32);
     return new SHA256().init().update(left).update(right).final();
   }
+
+  static multi(one, two, three) {
+    const ctx = new SHA256();
+    ctx.init();
+    ctx.update(one);
+    ctx.update(two);
+    if (three)
+      ctx.update(three);
+    return ctx.final();
+  }
 }
 
 SHA256.id = 'sha256';
 SHA256.size = 32;
 SHA256.bits = 256;
+SHA256.blockSize = 64;
 SHA256.zero = Buffer.alloc(32, 0x00);
 SHA256.ctx = new SHA256();
 
