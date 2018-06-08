@@ -7,10 +7,10 @@
     "tcp"
   ],
   "license": "MIT",
-  "repository": "git://github.com/bcoin-org/urkel.git",
-  "homepage": "https://github.com/bcoin-org/urkel",
+  "repository": "git://github.com/handshake-org/urkel.git",
+  "homepage": "https://github.com/handshake-org/urkel",
   "bugs": {
-    "url": "https://github.com/bcoin-org/urkel/issues"
+    "url": "https://github.com/handshake-org/urkel/issues"
   },
   "author": "Christopher Jeffrey <chjjeffrey@gmail.com>",
   "main": "./lib/urkel.js",

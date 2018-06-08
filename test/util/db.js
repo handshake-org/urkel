@@ -1,7 +1,7 @@
 /*!
  * db.js - mock db
  * Copyright (c) 2017, Christopher Jeffrey (MIT License).
- * https://github.com/bcoin-org/bcoin
+ * https://github.com/handshake-org/urkel
  */
 
 'use strict';
