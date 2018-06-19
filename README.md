@@ -5,17 +5,17 @@ An optimized and cryptographically provable key-value store.
 ## Design
 
 The urkel tree was created for the [Handshake protocol][1], and is implemented
-as a base-2 merkelized trie. It was created as an alternative to Ethereum's
-base-16 patricia trie (which was the initial choice for Handshake name proofs).
-The design was inspired by Amaury Séchet's [Merklix tree][2] and shares many
-similarities to earlier work done by [Bram Cohen][3].
+as a base-2 merkelized trie. It was created as an alternative to [Ethereum's
+base-16 trie][2] (which was the initial choice for Handshake name proofs). The
+design was inspired by Amaury Séchet's [Merklix tree][3] and shares many
+similarities to earlier work done by [Bram Cohen][4].
 
 Urkel stores nodes in a series of append-only files for snapshotting and crash
 consistency capabilities. Due to these presence of these features, Urkel has
 the ability to expose a fully transactional database.
 
 The primary advantages in using an urkel tree over something like Ethereum's
-patricia trie are:
+trie are:
 
 - __Performance__ - Stores nodes in flat files instead of an existing key-value
   store like LevelDB. Urkel is its _own_ database. In benchmarks, this results
@@ -35,7 +35,8 @@ sizes less than 1kb even after hundreds of millions of leaves are present in
 the tree.
 
 History independence and non-destruction are also inherent properties of the
-urkel tree, just the same as the Ethereum patricia trie.
+urkel tree, just the same as the Ethereum trie. Note that urkel should only be
+used with uniformally distributed keys (i.e. hashed).
 
 Compaction, while available, is currently inefficient and requires user
 intervention. This will be optimized in a future C implementation of the urkel
@@ -43,7 +44,7 @@ tree. In the meantime, we don't see this as a problem as long as frequent
 commissions are avoided in consensus applications of the tree (i.e. avoid
 committing the tree on every block).
 
-A more in-depth description is available in the [Handshake Whitepaper][4].
+A more in-depth description is available in the [Handshake Whitepaper][5].
 
 ## Usage
 
@@ -105,6 +106,7 @@ all code is your original work. `</legalese>`
 See LICENSE for more info.
 
 [1]: https://handshake.org
-[2]: https://www.deadalnix.me/2016/09/24/introducing-merklix-tree-as-an-unordered-merkle-tree-on-steroid/
-[3]: https://github.com/bramcohen/MerkleSet
-[4]: https://handshake.org/paper
+[2]: https://github.com/ethereum/wiki/wiki/Patricia-Tree
+[3]: https://www.deadalnix.me/2016/09/24/introducing-merklix-tree-as-an-unordered-merkle-tree-on-steroid/
+[4]: https://github.com/bramcohen/MerkleSet
+[5]: https://handshake.org/paper
