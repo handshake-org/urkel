@@ -24,7 +24,8 @@
   },
   "dependencies": {
     "bfile": "~0.1.0",
-    "bmutex": "~0.1.0"
+    "bmutex": "~0.1.1",
+    "buffer-map": "~0.0.0"
   },
   "devDependencies": {
     "babel-core": "^6.26.3",
@@ -33,7 +34,7 @@
     "babel-polyfill": "^6.26.0",
     "babel-preset-env": "^1.7.0",
     "babelify": "^8.0.0",
-    "blru": "~0.1.0",
+    "blru": "~0.1.1",
     "browserify": "^16.2.2",
     "eslint": "^4.19.1",
     "mocha": "^5.2.0",
