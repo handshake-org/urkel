@@ -61,7 +61,7 @@ await tree.open();
 
 let key;
 
-const txn = tree.txn();
+const txn = tree.transaction();
 
 for (let i = 0; i < 500; i++) {
   const k = randomBytes(32);
