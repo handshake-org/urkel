@@ -28,7 +28,7 @@ function verify(root, key, proof) {
 }
 
 async function stress(prefix) {
-  const tree = new Tree(blake2b, 160, prefix);
+  const tree = new Tree(blake2b, 256, prefix);
   const keys = [];
 
   await tree.open();
@@ -126,7 +126,7 @@ async function doProof(tree, i, key) {
 }
 
 async function bench(prefix) {
-  const tree = new Tree(blake2b, 160, prefix);
+  const tree = new Tree(blake2b, 256, prefix);
   const items = [];
 
   await tree.open();
