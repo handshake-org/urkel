@@ -5,7 +5,7 @@
 
 const assert = require('assert');
 const crypto = require('crypto');
-const sha256 = require('bcrypto/lib/sha256');
+const blake2b = require('bcrypto/lib/blake2b');
 const DB = require('../test/util/db');
 const {Tree} = require('../');
 const util = require('./util');
@@ -23,22 +23,13 @@ const RATE = Math.floor(BLOCKS / 20);
 const TOTAL = BLOCKS * PER_BLOCK;
 const FILE = `${__dirname}/treedb`;
 
-async function commit(tree, db) {
-  if (!db)
-    return tree.commit();
-
-  const b = db.batch();
-  const r = await tree.commit(b);
-  await b.write();
-  return r;
+function verify(root, key, proof) {
+  return proof.verify(root, key, blake2b, 256);
 }
 
-async function stress(prefix, db) {
-  const tree = new Tree(sha256, 160, prefix, db, 4);
+async function stress(prefix) {
+  const tree = new Tree(blake2b, 160, prefix);
   const keys = [];
-
-  if (db)
-    await db.open();
 
   await tree.open();
 
@@ -63,10 +54,12 @@ async function stress(prefix, db) {
 
     const now = util.now();
 
-    for (const [key, value] of pairs)
-      await tree.insert(key, value);
+    const batch = tree.batch();
 
-    tree.rootHash();
+    for (const [key, value] of pairs)
+      await batch.insert(key, value);
+
+    batch.rootHash();
 
     console.log('Insertion: %d', util.now() - now);
 
@@ -77,7 +70,7 @@ async function stress(prefix, db) {
 
       const now = util.now();
 
-      await commit(tree, db);
+      await batch.commit();
 
       console.log('Commit: %d', util.now() - now);
 
@@ -103,9 +96,6 @@ async function stress(prefix, db) {
   }
 
   await tree.close();
-
-  if (db)
-    await db.close();
 }
 
 async function doProof(tree, i, key) {
@@ -126,7 +116,7 @@ async function doProof(tree, i, key) {
   if (proof.value)
     vsize = 1 + proof.value.length;
 
-  const [code, value] = tree.verify(key, proof);
+  const [code, value] = verify(tree.rootHash(), key, proof);
   assert(code === 0);
 
   console.log('Proof %d length: %d', i, proof.nodes.length);
@@ -135,14 +125,13 @@ async function doProof(tree, i, key) {
     i, proof.getSize(tree.hash, tree.bits) - vsize);
 }
 
-async function bench(prefix, db) {
-  const tree = new Tree(sha256, 160, prefix, db);
+async function bench(prefix) {
+  const tree = new Tree(blake2b, 160, prefix);
   const items = [];
 
-  if (db)
-    await db.open();
-
   await tree.open();
+
+  let batch = tree.batch();
 
   for (let i = 0; i < 100000; i++) {
     const r = Math.random() > 0.5;
@@ -156,7 +145,7 @@ async function bench(prefix, db) {
     const now = util.now();
 
     for (const [key, value] of items)
-      await tree.insert(key, value);
+      await batch.insert(key, value);
 
     console.log('Insert: %d.', util.now() - now);
   }
@@ -173,7 +162,7 @@ async function bench(prefix, db) {
   {
     const now = util.now();
 
-    await commit(tree, db);
+    await batch.commit();
 
     console.log('Commit: %d.', util.now() - now);
   }
@@ -190,12 +179,14 @@ async function bench(prefix, db) {
     console.log('Get (uncached): %d.', util.now() - now);
   }
 
+  batch = tree.batch();
+
   {
     const now = util.now();
 
     for (const [i, [key]] of items.entries()) {
       if (i & 1)
-        await tree.remove(key);
+        await batch.remove(key);
     }
 
     console.log('Remove: %d.', util.now() - now);
@@ -204,7 +195,7 @@ async function bench(prefix, db) {
   {
     const now = util.now();
 
-    await commit(tree, db);
+    await batch.commit();
 
     console.log('Commit: %d.', util.now() - now);
   }
@@ -212,7 +203,7 @@ async function bench(prefix, db) {
   {
     const now = util.now();
 
-    await commit(tree, db);
+    await batch.commit();
 
     console.log('Commit (nothing): %d.', util.now() - now);
   }
@@ -230,32 +221,22 @@ async function bench(prefix, db) {
     console.log('Proof: %d.', util.now() - now1);
 
     const now2 = util.now();
-    tree.verify(root, key, proof);
+    verify(root, key, proof);
     console.log('Verify: %d.', util.now() - now2);
   }
 
   await tree.close();
-
-  if (db)
-    await db.close();
 }
 
 (async () => {
-  if (process.argv[2] === 'bdb') {
-    console.log('Stress testing with BDB...');
-    await stress(FILE, createDB());
-    setInterval(() => {}, true);
-    return;
-  }
-
   if (process.argv[2] === 'stress') {
     console.log('Stress testing...');
-    await stress(FILE, null);
+    await stress(FILE);
     return;
   }
 
   console.log('Running Tree bench...');
-  await bench(null, new DB());
+  await bench();
 })().catch((err) => {
   console.error(err.stack);
   process.exit(1);

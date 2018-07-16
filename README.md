@@ -51,41 +51,44 @@ A more in-depth description is available in the [Handshake Whitepaper][5].
 ``` js
 const assert = require('assert');
 const crypto = require('bcrypto');
-const {Tree} = require('urkel');
+const urkel = require('urkel');
+const {Tree} = urkel;
 const {Blake2b, randomBytes} = crypto;
 
 const tree = new Tree(Blake2b, 256, '/path/to/my/db');
 
 await tree.open();
 
-let last;
+let key;
 
-// APIv1 - v2 will use transaction objects.
+const txn = tree.txn();
+
 for (let i = 0; i < 500; i++) {
-  const key = randomBytes(32);
-  const val = randomBytes(300);
+  const k = randomBytes(32);
+  const v = randomBytes(300);
 
-  await tree.insert(key, val);
+  await txn.insert(k, v);
 
-  last = key;
+  key = key;
 }
 
-await tree.commit();
+await txn.commit();
 
-const root = tree.rootHash();
-const proof = await tree.prove(root, last);
-const [code, value] = tree.verify(root, last, proof);
+const snapshot = tree.snapshot();
+const root = snapshot.rootHash();
+const proof = await snapshot.prove(key);
+const [code, value] = proof.verify(root, key, Blake2b, 256);
 
 assert(code === 0);
 
 if (value) {
   console.log('Valid proof for %s: %s',
-    last.toString('hex'), value.toString('hex'));
+    key.toString('hex'), value.toString('hex'));
 } else {
-  console.log('Absence proof for %s.', last.toString('hex'));
+  console.log('Absence proof for %s.', key.toString('hex'));
 }
 
-await tree.values((key, value) => {
+await snapshot.range((key, value) => {
   console.log('Iterated over item:');
   console.log('%s: %s', key.toString('hex'), value.toString('hex'));
 });

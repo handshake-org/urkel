@@ -24,8 +24,7 @@
   },
   "dependencies": {
     "bfile": "~0.1.0",
-    "bmutex": "~0.1.1",
-    "buffer-map": "~0.0.0"
+    "bmutex": "~0.1.1"
   },
   "devDependencies": {
     "babel-core": "^6.26.3",

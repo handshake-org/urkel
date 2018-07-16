@@ -6,7 +6,6 @@
 
 const assert = require('./util/assert');
 const crypto = require('crypto');
-const DB = require('./util/db');
 const {sha1, sha256} = require('./util/util');
 const {Tree, Proof} = require('../');
 
@@ -30,53 +29,36 @@ function reencode(tree, proof) {
   return Proof.decode(raw, tree.hash, tree.bits);
 }
 
-async function commit(tree, db) {
-  if (!db)
-    return tree.commit();
-
-  const b = db.batch();
-  const r = await tree.commit(b);
-  await b.write();
-  return r;
+function verify(root, key, proof) {
+  return proof.verify(root, key, sha256, 160);
 }
 
-async function compact(tree, db) {
-  if (!db)
-    return tree.compact();
-
-  const b = db.batch();
-  const r = await tree.compact(b);
-  await b.write();
-  return r;
-}
-
-async function runTest(db) {
-  const tree = new Tree(sha256, 160, null, db, 0);
-
-  if (db)
-    await db.open();
+async function runTest() {
+  const tree = new Tree(sha256, 160);
 
   await tree.open();
 
+  const batch = tree.batch();
+
   // Insert some values.
-  await tree.insert(FOO1, BAR1);
-  await tree.insert(FOO2, BAR2);
-  await tree.insert(FOO3, BAR3);
+  await batch.insert(FOO1, BAR1);
+  await batch.insert(FOO2, BAR2);
+  await batch.insert(FOO3, BAR3);
 
   // Commit and get first non-empty root.
-  const first = await commit(tree, db);
+  const first = await batch.commit();
   assert.strictEqual(first.length, tree.hash.size);
 
   // Get a committed value.
   assert.bufferEqual(await tree.get(FOO2), BAR2);
 
   // Insert a new value.
-  await tree.insert(FOO4, BAR4);
+  await batch.insert(FOO4, BAR4);
 
   // Get second root with new committed value.
   // Ensure it is different from the first!
   {
-    const root = await commit(tree, db);
+    const root = await batch.commit();
     assert.strictEqual(root.length, tree.hash.size);
     assert.notBufferEqual(root, first);
   }
@@ -85,16 +67,16 @@ async function runTest(db) {
   assert.bufferEqual(await tree.get(FOO4), BAR4);
 
   // Make sure we can snapshot the old root.
-  const ss = await tree.snapshot(first);
+  const ss = tree.snapshot(first);
   assert.strictEqual(await ss.get(FOO4), null);
   assert.bufferEqual(ss.rootHash(), first);
 
   // Remove the last value.
-  await tree.remove(FOO4);
+  await batch.remove(FOO4);
 
   // Commit removal and ensure our root hash
   // has reverted to what it was before (first).
-  assert.bufferEqual(await commit(tree, db), first);
+  assert.bufferEqual(await batch.commit(), first);
 
   // Make sure removed value is gone.
   assert.strictEqual(await tree.get(FOO4), null);
@@ -104,63 +86,70 @@ async function runTest(db) {
 
   // Create a proof and verify.
   {
-    const proof = await tree.prove(first, FOO2);
+    const ss = tree.snapshot(first);
+    const proof = await ss.prove(FOO2);
     assert.deepStrictEqual(reencode(tree, proof), proof);
-    const [code, data] = tree.verify(first, FOO2, proof);
+    const [code, data] = verify(first, FOO2, proof);
     assert.strictEqual(code, 0);
     assert.bufferEqual(data, BAR2);
   }
 
   // Create a non-existent proof and verify.
   {
-    const proof = await tree.prove(first, FOO5);
+    const ss = tree.snapshot(first);
+    const proof = await ss.prove(FOO5);
     assert.deepStrictEqual(reencode(tree, proof), proof);
-    const [code, data] = tree.verify(first, FOO5, proof);
+    const [code, data] = verify(first, FOO5, proof);
     assert.strictEqual(code, 0);
     assert.strictEqual(data, null);
   }
 
   // Create a non-existent proof and verify.
   {
-    const proof = await tree.prove(first, FOO4);
+    const ss = tree.snapshot(first);
+    const proof = await ss.prove(FOO4);
     assert.deepStrictEqual(reencode(tree, proof), proof);
-    const [code, data] = tree.verify(first, FOO4, proof);
+    const [code, data] = verify(first, FOO4, proof);
     assert.strictEqual(code, 0);
     assert.strictEqual(data, null);
   }
 
   // Create a proof and verify.
   {
-    const proof = await tree.prove(FOO2);
+    const ss = tree.snapshot();
+    const proof = await ss.prove(FOO2);
     assert.deepStrictEqual(reencode(tree, proof), proof);
-    const [code, data] = tree.verify(tree.rootHash(), FOO2, proof);
+    const [code, data] = verify(tree.rootHash(), FOO2, proof);
     assert.strictEqual(code, 0);
     assert.bufferEqual(data, BAR2);
   }
 
   // Create a non-existent proof and verify.
   {
+    const ss = tree.snapshot();
     const proof = await tree.prove(FOO5);
     assert.deepStrictEqual(reencode(tree, proof), proof);
-    const [code, data] = tree.verify(tree.rootHash(), FOO5, proof);
+    const [code, data] = verify(tree.rootHash(), FOO5, proof);
     assert.strictEqual(code, 0);
     assert.strictEqual(data, null);
   }
 
   // Create a proof and verify.
   {
+    const ss = tree.snapshot();
     const proof = await tree.prove(FOO4);
     assert.deepStrictEqual(reencode(tree, proof), proof);
-    const [code, data] = tree.verify(tree.rootHash(), FOO4, proof);
+    const [code, data] = verify(tree.rootHash(), FOO4, proof);
     assert.strictEqual(code, 0);
     assert.strictEqual(data, null);
   }
 
   // Iterate over values.
   {
+    const ss = tree.snapshot();
     const items = [];
 
-    await tree.values((key, value) => {
+    await ss.range((key, value) => {
       items.push([key, value]);
     });
 
@@ -173,18 +162,20 @@ async function runTest(db) {
 
   // Test persistence.
   {
-    const root = await commit(tree, db);
+    const root = await batch.commit();
 
     await tree.close();
-    await tree.open(root);
+    await tree.open();
+
+    const ss = tree.snapshot(root);
 
     // Make sure older values are still there.
-    assert.bufferEqual(await tree.get(FOO2), BAR2);
+    assert.bufferEqual(await ss.get(FOO2), BAR2);
   }
 
   // Test persistence of best state.
   {
-    const root = await commit(tree, db);
+    const root = await batch.commit();
 
     await tree.close();
     await tree.open();
@@ -196,39 +187,35 @@ async function runTest(db) {
   }
 
   await tree.close();
-
-  if (db)
-    await db.close();
 }
 
-async function pummel(db) {
-  const tree = new Tree(sha256, 160, null, db, 0);
+async function pummel() {
+  const tree = new Tree(sha256, 160);
   const items = [];
   const set = new Set();
 
-  if (db)
-    await db.open();
-
   await tree.open();
+
+  let batch = tree.batch();
 
   while (set.size < 10000) {
     const key = crypto.randomBytes(tree.bits >>> 3);
     const value = crypto.randomBytes(random(1, 100));
-    const hex = key.toString('hex');
+    const key1 = key.toString('binary');
 
-    if (set.has(hex))
+    if (set.has(key1))
       continue;
 
     key[key.length - 1] ^= 1;
 
-    const h = key.toString('hex');
+    const key2 = key.toString('binary');
 
     key[key.length - 1] ^= 1;
 
-    if (set.has(h))
+    if (set.has(key2))
       continue;
 
-    set.add(hex);
+    set.add(key1);
 
     items.push([key, value]);
   }
@@ -240,12 +227,12 @@ async function pummel(db) {
 
   {
     for (const [i, [key, value]] of items.entries()) {
-      await tree.insert(key, value);
+      await batch.insert(key, value);
       if (i === (items.length >>> 1) - 1)
-        midRoot = tree.rootHash();
+        midRoot = batch.rootHash();
     }
 
-    const root = await commit(tree, db);
+    const root = await batch.commit();
     lastRoot = root;
 
     for (const [key, value] of items) {
@@ -274,11 +261,11 @@ async function pummel(db) {
 
   for (const [i, [key]] of items.entries()) {
     if (i < (items.length >>> 1))
-      await tree.remove(key);
+      await batch.remove(key);
   }
 
   {
-    const root = await commit(tree, db);
+    const root = await batch.commit();
 
     await tree.close();
     await tree.open();
@@ -297,7 +284,7 @@ async function pummel(db) {
   }
 
   {
-    const root = await commit(tree, db);
+    const root = await batch.commit();
 
     await tree.close();
     await tree.open();
@@ -323,7 +310,7 @@ async function pummel(db) {
 
     let i = 0;
 
-    await tree.values((key, value) => {
+    await tree.range((key, value) => {
       const [k, v] = expect[i];
 
       assert.bufferEqual(key, k);
@@ -340,7 +327,7 @@ async function pummel(db) {
 
     const root = tree.rootHash();
     const proof = await tree.prove(key);
-    const [code, data] = tree.verify(root, key, proof);
+    const [code, data] = verify(root, key, proof);
 
     assert.strictEqual(code, 0);
 
@@ -352,7 +339,7 @@ async function pummel(db) {
 
   {
     const stat1 = await tree.store.stat();
-    await compact(tree, db);
+    await tree.compact();
     const stat2 = await tree.store.stat();
     assert(stat1.size > stat2.size);
   }
@@ -361,13 +348,15 @@ async function pummel(db) {
 
   rand.sort((a, b) => Math.random() >= 0.5 ? 1 : -1);
 
+  batch = tree.batch();
+
   for (const [i, [key, value]] of rand.entries())
-    await tree.insert(key, value);
+    await batch.insert(key, value);
 
   {
-    assert.bufferEqual(tree.rootHash(), lastRoot);
+    assert.bufferEqual(batch.rootHash(), lastRoot);
 
-    const root = await commit(tree, db);
+    const root = await batch.commit();
 
     await tree.close();
     await tree.open();
@@ -377,27 +366,16 @@ async function pummel(db) {
   }
 
   await tree.close();
-
-  if (db)
-    await db.close();
 }
 
 describe('Tree', function() {
   this.timeout(5000);
 
   it('should test tree', async () => {
-    await runTest(new DB());
-  });
-
-  it('should test tree standalone', async () => {
-    await runTest(null);
+    await runTest();
   });
 
   it('should pummel tree', async () => {
-    await pummel(new DB());
-  });
-
-  it('should pummel tree standalone', async () => {
-    await pummel(null);
+    await pummel();
   });
 });
