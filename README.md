@@ -52,7 +52,7 @@ A more in-depth description is available in the [Handshake Whitepaper][5].
 const assert = require('assert');
 const crypto = require('bcrypto');
 const urkel = require('urkel');
-const {Tree} = urkel;
+const {Tree, Proof} = urkel;
 const {Blake2b, randomBytes} = crypto;
 
 const tree = new Tree(Blake2b, 256, '/path/to/my/db');
@@ -69,7 +69,7 @@ for (let i = 0; i < 500; i++) {
 
   await txn.insert(k, v);
 
-  key = key;
+  key = k;
 }
 
 await txn.commit();
@@ -79,7 +79,10 @@ const root = snapshot.rootHash();
 const proof = await snapshot.prove(key);
 const [code, value] = proof.verify(root, key, Blake2b, 256);
 
-assert(code === 0);
+if (code !== 0) {
+  console.log('Could not verify proof: %s.', Proof.code(code));
+  return;
+}
 
 if (value) {
   console.log('Valid proof for %s: %s',
