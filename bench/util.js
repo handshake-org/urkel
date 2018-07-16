@@ -46,25 +46,6 @@ function wait() {
   return new Promise(r => setTimeout(r, 1000));
 }
 
-function createDB(cacheSize, compression) {
-  if (cacheSize == null)
-    cacheSize = 8 << 20;
-
-  if (compression == null)
-    compression = true;
-
-  const bdb = require('bdb');
-
-  return bdb.create({
-    location: __dirname + '/benchdb',
-    memory: false,
-    compression,
-    cacheSize,
-    createIfMissing: true,
-    errorIfExists: false
-  });
-}
-
 function now() {
   return performance.now() >>> 0;
 }
@@ -81,6 +62,5 @@ function bench(time) {
 exports.memory = memory;
 exports.logMemory = logMemory;
 exports.wait = wait;
-exports.createDB = createDB;
 exports.now = now;
 exports.bench = bench;

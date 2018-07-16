@@ -10,12 +10,6 @@ const DB = require('../test/util/db');
 const {Tree} = require('../');
 const util = require('./util');
 
-const {
-  memory,
-  logMemory,
-  createDB
-} = util;
-
 const BLOCKS = +process.argv[3] || 10000;
 const PER_BLOCK = +process.argv[4] || 500;
 const INTERVAL = +process.argv[5] || 88;
@@ -66,7 +60,7 @@ async function stress(prefix) {
     pairs.length = 0;
 
     if (i && (i % INTERVAL) === 0) {
-      memory();
+      util.memory();
 
       const now = util.now();
 
@@ -74,7 +68,7 @@ async function stress(prefix) {
 
       console.log('Commit: %d', util.now() - now);
 
-      logMemory();
+      util.logMemory();
 
       await doProof(tree, i, last);
     }
@@ -154,7 +148,7 @@ async function bench(prefix) {
     const now = util.now();
 
     for (const [key] of items)
-      await tree.get(key);
+      assert(await batch.get(key));
 
     console.log('Get (cached): %d.', util.now() - now);
   }
@@ -221,7 +215,11 @@ async function bench(prefix) {
     console.log('Proof: %d.', util.now() - now1);
 
     const now2 = util.now();
-    verify(root, key, proof);
+
+    const [code, value] = verify(root, key, proof);
+    assert(code === 0);
+    assert(value);
+
     console.log('Verify: %d.', util.now() - now2);
   }
 
