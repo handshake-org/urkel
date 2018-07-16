@@ -149,10 +149,10 @@ async function runTest() {
     const ss = tree.snapshot();
     const items = [];
 
-    await ss.range((key, value) => {
+    for await (const [key, value] of ss)
       items.push([key, value]);
-    });
 
+    assert.strictEqual(items.length, 3);
     assert.deepStrictEqual(items, [
       [FOO1, BAR1],
       [FOO2, BAR2],
@@ -310,14 +310,14 @@ async function pummel() {
 
     let i = 0;
 
-    await tree.range((key, value) => {
+    for await (const [key, value] of tree) {
       const [k, v] = expect[i];
 
       assert.bufferEqual(key, k);
       assert.bufferEqual(value, v);
 
       i += 1;
-    });
+    }
 
     assert.strictEqual(i, items.length >>> 1);
   }

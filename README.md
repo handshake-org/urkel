@@ -91,10 +91,22 @@ if (value) {
   console.log('Absence proof for %s.', key.toString('hex'));
 }
 
-await snapshot.range((key, value) => {
+// Snapshots and transactions are async iterators.
+// If your environment supports `for await`, you
+// can use it with a snapshot, tree, or transaction.
+for await (const [key, value] of snapshot) {
   console.log('Iterated over item:');
   console.log('%s: %s', key.toString('hex'), value.toString('hex'));
-});
+}
+
+// Otherwise, the non-for-await way is available.
+const iter = snapshot.iterator();
+
+while (await iter.next()) {
+  const {key, value} = iter;
+  console.log('Iterated over item:');
+  console.log('%s: %s', key.toString('hex'), value.toString('hex'));
+}
 
 await tree.close();
 ```
