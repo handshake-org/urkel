@@ -6,152 +6,161 @@
 
 class Tree {
   async _insert(node, leaf, depth) {
-    if (node.isHash())
-      node = await this.resolve(node);
-
-    // Empty (sub)tree.
-    if (node.isNull()) {
-      // Replace the empty node.
-      return leaf;
-    }
-
-    // Leaf node.
-    if (node.isLeaf()) {
-      // Current key.
-      if (leaf.key.equals(node.key)) {
-        // Exact leaf already exists.
-        if (leaf.data.equals(node.data))
-          return null;
-
-        // The branch doesn't grow.
-        // Replace the current node.
+    switch (node.type()) {
+      case NULL: {
+        // Replace the empty node.
         return leaf;
       }
 
-      assert(depth !== this.bits);
+      case INTERNAL: {
+        if (depth === this.bits) {
+          throw new MissingNodeError({
+            nodeHash: node.hash(this.hash),
+            key,
+            depth
+          });
+        }
 
-      // Count colliding bits.
-      let bits = countBits(leaf.key, node.key, depth);
+        // Internal node.
+        if (hasBit(leaf.key, depth)) {
+          const right = await this._insert(node.right, leaf, depth + 1);
 
-      // The other leaf is our sibling.
-      let next = leaf;
+          if (!right)
+            return null;
 
-      if (hasBit(leaf.key, depth + bits))
-        next = new Internal(node, next);
-      else
-        next = new Internal(next, node);
+          return new Internal(node.left, right);
+        }
 
-      while (bits > 0) {
-        bits -= 1;
+        const left = await this._insert(node.left, leaf, depth + 1);
+
+        if (!left)
+          return null;
+
+        return new Internal(left, node.right);
+      }
+
+      case LEAF: {
+        // Current key.
+        if (leaf.key.equals(node.key)) {
+          // Exact leaf already exists.
+          if (leaf.data.equals(node.data))
+            return null;
+
+          // The branch doesn't grow.
+          // Replace the current node.
+          return leaf;
+        }
+
+        assert(depth !== this.bits);
+
+        // Count colliding bits.
+        let bits = countBits(leaf.key, node.key, depth);
+
+        // The other leaf is our sibling.
+        let next = leaf;
 
         if (hasBit(leaf.key, depth + bits))
-          next = new Internal(NIL, next);
+          next = new Internal(node, next);
         else
-          next = new Internal(next, NIL);
+          next = new Internal(next, node);
+
+        while (bits > 0) {
+          bits -= 1;
+
+          if (hasBit(leaf.key, depth + bits))
+            next = new Internal(NIL, next);
+          else
+            next = new Internal(next, NIL);
+        }
+
+        return next;
       }
 
-      return next;
+      case HASH: {
+        const rn = await this.resolve(node);
+        return this._insert(rn, leaf, depth);
+      }
+
+      default: {
+        throw new AssertionError('Unknown node.');
+      }
     }
-
-    if (depth === this.bits) {
-      throw new MissingNodeError({
-        nodeHash: node.hash(this.hash),
-        key,
-        depth
-      });
-    }
-
-    assert(node.isInternal());
-
-    // Internal node.
-    if (hasBit(leaf.key, depth)) {
-      const right = await this._insert(node.right, leaf, depth + 1);
-
-      if (!right)
-        return null;
-
-      return new Internal(node.left, right);
-    }
-
-    const left = await this._insert(node.left, leaf, depth + 1);
-
-    if (!left)
-      return null;
-
-    return new Internal(left, node.right);
   }
 
-  async _remove(node, sib, key, depth) {
-    if (node.isHash())
-      node = await this.resolve(node);
-
-    // Empty (sub)tree.
-    if (node.isNull())
-      return null;
-
-    // Leaf node.
-    if (node.isLeaf()) {
-      // Not our key.
-      if (!key.equals(node.key))
+  async _remove(node, sibling, key, depth) {
+    switch (node.type()) {
+      case NULL: {
+        // Empty (sub)tree.
         return null;
-
-      // One extra disk read.
-      if (sib.isHash())
-        sib = await this.resolve(sib);
-
-      // Shrink the subtree if we're a leaf.
-      if (sib.isLeaf())
-        return sib;
-
-      return NIL;
-    }
-
-    if (depth === this.bits) {
-      throw new MissingNodeError({
-        nodeHash: node.hash(this.hash),
-        key,
-        depth
-      });
-    }
-
-    assert(node.isInternal());
-
-    // Internal node.
-    if (hasBit(key, depth)) {
-      let right = await this._remove(node.right, node.left, key, depth + 1);
-
-      if (!right)
-        return null;
-
-      if (right.isLeaf()) {
-        if (right.equals(node.left, this.hash))
-          return right;
-
-        if (node.left.isNull())
-          return right;
-
-        right = right.toHash(this.hash);
       }
 
-      return new Internal(node.left, right);
+      case INTERNAL: {
+        if (depth === this.bits) {
+          throw new MissingNodeError({
+            nodeHash: node.hash(this.hash),
+            key,
+            depth
+          });
+        }
+
+        if (hasBit(key, depth)) {
+          let right = await this._remove(node.right, node.left, key, depth + 1);
+
+          if (!right)
+            return null;
+
+          if (right.hasLeaf()) {
+            if (right.equals(node.left, this.hash))
+              return right;
+
+            if (node.left.isNull())
+              return right;
+
+            right = right.toHash(this.hash);
+          }
+
+          return new Internal(node.left, right);
+        }
+
+        let left = await this._remove(node.left, node.right, key, depth + 1);
+
+        if (!left)
+          return null;
+
+        if (left.hasLeaf()) {
+          if (left.equals(node.right, this.hash))
+            return left;
+
+          if (node.right.isNull())
+            return left;
+
+          left = left.toHash(this.hash);
+        }
+
+        return new Internal(left, node.right);
+      }
+
+      case LEAF: {
+        // Not our key.
+        if (!key.equals(node.key))
+          return null;
+
+        // Shrink the subtree if we're a leaf.
+        if (sibling.hasLeaf())
+          return sibling;
+
+        return NIL;
+      }
+
+      case HASH: {
+        const rn = await this.resolve(node);
+        return this._remove(rn, sibling, key, depth);
+      }
+
+      default: {
+        throw new AssertionError('Unknown node.');
+      }
     }
-
-    let left = await this._remove(node.left, node.right, key, depth + 1);
-
-    if (!left)
-      return null;
-
-    if (left.isLeaf()) {
-      if (left.equals(node.right, this.hash))
-        return left;
-
-      if (node.right.isNull())
-        return left;
-
-      left = left.toHash(this.hash);
-    }
-
-    return new Internal(left, node.right);
   }
 }
 
@@ -161,7 +170,7 @@ class Node {
   }
 }
 
-class Batch {
+class Transaction {
   async insert(key, value) {
     assert(this.tree.isKey(key));
     assert(Buffer.isBuffer(value));
