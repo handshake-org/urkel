@@ -81,20 +81,6 @@ class Tree {
     return new Internal(left, node.right);
   }
 
-  async insert(key, value) {
-    assert(this.isKey(key));
-    assert(Buffer.isBuffer(value));
-
-    const hash = this.hashValue(key, value);
-    const leaf = new Leaf(hash, key, value);
-    const root = await this._insert(this.root, leaf, 0);
-
-    if (root)
-      this.root = root;
-
-    return this.root;
-  }
-
   async _remove(node, sib, key, depth) {
     if (node.isHash())
       node = await this.resolve(node);
@@ -167,22 +153,38 @@ class Tree {
 
     return new Internal(left, node.right);
   }
+}
 
-  async remove(key) {
-    assert(this.isKey(key));
+class Node {
+  equals(node, hash) {
+    return this.hash(hash).equals(node.hash(hash));
+  }
+}
 
-    const root = await this._remove(this.root, NIL, key, 0);
+class Batch {
+  async insert(key, value) {
+    assert(this.tree.isKey(key));
+    assert(Buffer.isBuffer(value));
+
+    const hash = this.tree.hashValue(key, value);
+    const leaf = new Leaf(hash, key, value);
+    const root = await this.tree._insert(this.root, leaf, 0);
 
     if (root)
       this.root = root;
 
     return this.root;
   }
-}
 
-class Node {
-  equals(node, hash) {
-    return this.hash(hash).equals(node.hash(hash));
+  async remove(key) {
+    assert(this.tree.isKey(key));
+
+    const root = await this.tree._remove(this.root, NIL, key, 0);
+
+    if (root)
+      this.root = root;
+
+    return this.root;
   }
 }
 
