@@ -27,6 +27,8 @@ async function stress(prefix) {
 
   await tree.open();
 
+  const batch = tree.batch();
+
   console.log(
     'Committing %d values to tree at a rate of %d per block.',
     TOTAL,
@@ -35,20 +37,14 @@ async function stress(prefix) {
   for (let i = 0; i < BLOCKS; i++) {
     const pairs = [];
 
-    let last = null;
-
     for (let j = 0; j < PER_BLOCK; j++) {
       const key = crypto.randomBytes(tree.bits >>> 3);
       const value = crypto.randomBytes(300);
 
       pairs.push([key, value]);
-
-      last = key;
     }
 
     const now = util.now();
-
-    const batch = tree.batch();
 
     for (const [key, value] of pairs)
       await batch.insert(key, value);
@@ -56,6 +52,8 @@ async function stress(prefix) {
     batch.rootHash();
 
     console.log('Insertion: %d', util.now() - now);
+
+    const [key, value] = pairs[pairs.length - 1];
 
     pairs.length = 0;
 
@@ -70,11 +68,11 @@ async function stress(prefix) {
 
       util.logMemory();
 
-      await doProof(tree, i, last);
+      await doProof(tree, i, key, value);
     }
 
     if ((i % RATE) === 0)
-      keys.push(last);
+      keys.push(key);
 
     if ((i % 100) === 0)
       console.log('Keys: %d', i * PER_BLOCK);
@@ -92,7 +90,7 @@ async function stress(prefix) {
   await tree.close();
 }
 
-async function doProof(tree, i, key) {
+async function doProof(tree, i, key, expect) {
   const now = util.now();
   const proof = await tree.prove(key);
 
@@ -112,6 +110,8 @@ async function doProof(tree, i, key) {
 
   const [code, value] = verify(tree.rootHash(), key, proof);
   assert(code === 0);
+  assert(value && value.length === 300);
+  assert(value.equals(expect));
 
   console.log('Proof %d length: %d', i, proof.nodes.length);
   console.log('Proof %d size: %d', i, size);

@@ -7,7 +7,7 @@
 class Tree {
   async _insert(node, leaf, depth) {
     if (node.isHash())
-      node = await node.resolve(this.store);
+      node = await this.resolve(node);
 
     // Empty (sub)tree.
     if (node.isNull()) {
@@ -97,7 +97,7 @@ class Tree {
 
   async _remove(node, sib, key, depth) {
     if (node.isHash())
-      node = await node.resolve(this.store);
+      node = await this.resolve(node);
 
     // Empty (sub)tree.
     if (node.isNull())
@@ -111,7 +111,7 @@ class Tree {
 
       // One extra disk read.
       if (sib.isHash())
-        sib = await sib.resolve(this.store);
+        sib = await this.resolve(sib);
 
       // Shrink the subtree if we're a leaf.
       if (sib.isLeaf())
@@ -231,7 +231,7 @@ class Tree {
         let result = null;
 
         if (values) {
-          const value = await node.getValue(this.store);
+          const value = await this.resolveValue(node);
           result = cb(node.key, value);
         } else {
           result = cb(node.key);
@@ -244,7 +244,7 @@ class Tree {
       }
 
       case HASH: {
-        const rn = await node.resolve(this.store);
+        const rn = await this.resolve(node);
         return this._iterate(rn, values, cb);
       }
     }
