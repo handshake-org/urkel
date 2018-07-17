@@ -173,7 +173,7 @@ class Node {
 class Transaction {
   async insert(key, value) {
     assert(this.tree.isKey(key));
-    assert(Buffer.isBuffer(value));
+    assert(this.tree.isValue(value));
 
     const hash = this.tree.hashValue(key, value);
     const leaf = new Leaf(hash, key, value);
@@ -242,7 +242,7 @@ class Tree {
         let result = null;
 
         if (values) {
-          const value = await this.resolveValue(node);
+          const value = await this.retrieve(node);
           result = cb(node.key, value);
         } else {
           result = cb(node.key);
