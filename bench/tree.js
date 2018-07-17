@@ -23,6 +23,7 @@ function verify(root, key, proof) {
 
 async function stress(prefix) {
   const tree = new Tree(blake2b, 256, prefix);
+  const store = tree.store;
   const keys = [];
 
   await tree.open();
@@ -65,6 +66,8 @@ async function stress(prefix) {
       await batch.commit();
 
       console.log('Commit: %d', util.now() - now);
+      console.log('WB Size: %dmb',
+        (store.wb.data.length / 1024 / 1024).toFixed(2));
 
       util.logMemory();
 
