@@ -67,7 +67,7 @@ async function stress(prefix) {
 
       console.log('Commit: %d', util.now() - now);
       console.log('WB Size: %dmb',
-        (store.wb.data.length / 1024 / 1024).toFixed(2));
+        (store.buffer.data.length / 1024 / 1024).toFixed(2));
 
       util.logMemory();
 
