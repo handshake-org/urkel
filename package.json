@@ -17,7 +17,7 @@
   "scripts": {
     "browserify": "browserify -s urkel lib/urkel.js | uglifyjs -c > urkel.js",
     "clean": "rm -f urkel.js",
-    "lint": "eslint lib/ research/ bench/ test/ || exit 0",
+    "lint": "eslint lib/ bench/ test/ || exit 0",
     "test": "mocha --reporter spec test/*-test.js",
     "test-file": "mocha --reporter spec",
     "webpack": "webpack --mode production --config webpack.config.js"

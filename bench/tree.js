@@ -4,18 +4,18 @@
 'use strict';
 
 const assert = require('assert');
+const Path = require('path');
 const crypto = require('crypto');
 const blake2b = require('bcrypto/lib/blake2b');
-const DB = require('../test/util/db');
 const {Tree} = require('../');
 const util = require('./util');
 
 const BLOCKS = +process.argv[3] || 10000;
 const PER_BLOCK = +process.argv[4] || 500;
 const INTERVAL = +process.argv[5] || 88;
-const RATE = Math.floor(BLOCKS / 20);
+const RATE = Math.floor(BLOCKS / 1000);
 const TOTAL = BLOCKS * PER_BLOCK;
-const FILE = `${__dirname}/treedb`;
+const FILE = Path.resolve(__dirname, 'treedb');
 
 function verify(root, key, proof) {
   return proof.verify(root, key, blake2b, 256);
@@ -24,7 +24,7 @@ function verify(root, key, proof) {
 async function stress(prefix) {
   const tree = new Tree(blake2b, 256, prefix);
   const store = tree.store;
-  const keys = [];
+  const items = [];
 
   await tree.open();
 
@@ -39,26 +39,37 @@ async function stress(prefix) {
     const pairs = [];
 
     for (let j = 0; j < PER_BLOCK; j++) {
-      const key = crypto.randomBytes(tree.bits >>> 3);
-      const value = crypto.randomBytes(300);
+      const k = crypto.randomBytes(tree.bits >>> 3);
+      const v = crypto.randomBytes(300);
 
-      pairs.push([key, value]);
+      pairs.push([k, v]);
     }
 
-    const now = util.now();
+    {
+      const now = util.now();
 
-    for (const [key, value] of pairs)
-      await batch.insert(key, value);
+      for (const [k, v] of pairs)
+        await batch.insert(k, v);
 
-    batch.rootHash();
+      console.log('Insertion: %d', util.now() - now);
+    }
 
-    console.log('Insertion: %d', util.now() - now);
-
-    const [key, value] = pairs[pairs.length - 1];
+    const [key, value] = pairs.pop();
 
     pairs.length = 0;
 
-    if (i && (i % INTERVAL) === 0) {
+    {
+      const now = util.now();
+
+      batch.rootHash();
+
+      console.log('Hashing: %d', util.now() - now);
+    }
+
+    if (i === 0)
+      continue;
+
+    if ((i % INTERVAL) === 0) {
       util.memory();
 
       const now = util.now();
@@ -66,8 +77,7 @@ async function stress(prefix) {
       await batch.commit();
 
       console.log('Commit: %d', util.now() - now);
-      console.log('WB Size: %dmb',
-        (store.buffer.data.length / 1024 / 1024).toFixed(2));
+      console.log('WB Size: %dmb', store.buffer.data.length / 1024 / 1024);
 
       util.logMemory();
 
@@ -75,7 +85,7 @@ async function stress(prefix) {
     }
 
     if ((i % RATE) === 0)
-      keys.push(key);
+      items.push([key, value]);
 
     if ((i % 100) === 0)
       console.log('Keys: %d', i * PER_BLOCK);
@@ -85,12 +95,12 @@ async function stress(prefix) {
   console.log('Blocks: %d.', BLOCKS);
   console.log('Items Per Block: %d.', PER_BLOCK);
 
-  for (let i = 0; i < keys.length; i++) {
-    const key = keys[i];
-    await doProof(tree, i, key);
+  for (let i = 0; i < items.length; i++) {
+    const [key, value] = items[i];
+    await doProof(tree, i, key, value);
   }
 
-  await tree.close();
+  return tree.close();
 }
 
 async function doProof(tree, i, key, expect) {
@@ -171,7 +181,7 @@ async function bench(prefix) {
     const now = util.now();
 
     for (const [key] of items)
-      await tree.get(key);
+      assert(await tree.get(key));
 
     console.log('Get (uncached): %d.', util.now() - now);
   }
@@ -210,34 +220,46 @@ async function bench(prefix) {
 
   {
     const root = tree.rootHash();
-
     const [key] = items[items.length - 100];
 
-    const now1 = util.now();
-    const proof = await tree.prove(key);
-    console.log('Proof: %d.', util.now() - now1);
+    let proof = null;
 
-    const now2 = util.now();
+    {
+      const now = util.now();
 
-    const [code, value] = verify(root, key, proof);
-    assert(code === 0);
-    assert(value);
+      proof = await tree.prove(key);
 
-    console.log('Verify: %d.', util.now() - now2);
+      console.log('Proof: %d.', util.now() - now);
+    }
+
+    {
+      const now = util.now();
+      const [code, value] = verify(root, key, proof);
+      assert(code === 0);
+      assert(value);
+      console.log('Verify: %d.', util.now() - now);
+    }
   }
 
-  await tree.close();
+  return tree.close();
 }
 
 (async () => {
-  if (process.argv[2] === 'stress') {
-    console.log('Stress testing...');
-    await stress(FILE);
-    return;
-  }
+  const arg = process.argv.length >= 3
+    ? process.argv[2]
+    : '';
 
-  console.log('Running Tree bench...');
-  await bench();
+  switch (arg) {
+    case 'stress':
+      console.log('Stress testing...');
+      return stress(FILE);
+    case 'bench':
+      console.log('Benchmarking (disk)...');
+      return bench(FILE);
+    default:
+      console.log('Benchmarking (memory)...');
+      return bench();
+  }
 })().catch((err) => {
   console.error(err.stack);
   process.exit(1);
