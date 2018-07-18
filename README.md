@@ -22,7 +22,7 @@ trie are:
   in a 100x+ speedup.
 - __Simplicity__ - Maintains only two types of nodes: internal nodes and leaf
   nodes.
-- __Storage__ - Internal nodes are small (a constant size of 77 bytes on disk).
+- __Storage__ - Internal nodes are small (a constant size of 76 bytes on disk).
   This is important as internal nodes are frequently rewritten during updates
   to the tree.
 - __Proof Size__ - Sibling nodes required for proofs are a constant size of 32
@@ -49,12 +49,13 @@ A more in-depth description is available in the [Handshake Whitepaper][5].
 ## Usage
 
 ``` js
-const assert = require('assert');
-const crypto = require('bcrypto');
+const bcrypto = require('bcrypto');
 const urkel = require('urkel');
+const {Blake2b, randomBytes} = bcrypto;
 const {Tree, Proof} = urkel;
-const {Blake2b, randomBytes} = crypto;
 
+// Create a tree using blake2b-256
+// and a depth/key-size of 256 bits.
 const tree = new Tree(Blake2b, 256, '/path/to/my/db');
 
 await tree.open();
