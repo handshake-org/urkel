@@ -109,7 +109,7 @@ class Tree {
           if (!right)
             return null;
 
-          if (right.hasLeaf()) {
+          if (right.leaf) {
             if (right.equals(node.left, this.hash))
               return right;
 
@@ -127,7 +127,7 @@ class Tree {
         if (!left)
           return null;
 
-        if (left.hasLeaf()) {
+        if (left.leaf) {
           if (left.equals(node.right, this.hash))
             return left;
 
@@ -146,7 +146,7 @@ class Tree {
           return null;
 
         // Shrink the subtree if we're a leaf.
-        if (sibling.hasLeaf())
+        if (sibling.leaf)
           return sibling;
 
         return NIL;
