@@ -28,6 +28,28 @@ async function stress(prefix) {
 
   await tree.open();
 
+  {
+    const now = util.now();
+
+    const fakeHash = Buffer.alloc(32, 0x00);
+    fakeHash[0] = 0x01;
+
+    let missing = false;
+
+    try {
+      await tree.getHistory(fakeHash);
+    } catch (e) {
+      if (e.code !== 'ERR_MISSING_NODE')
+        throw e;
+      missing = true;
+    }
+
+    assert(missing);
+
+    console.log('Size: %s', tree.store.rootCache.size);
+    console.log('Roots: %d', util.now() - now);
+  }
+
   const batch = tree.batch();
 
   console.log(
