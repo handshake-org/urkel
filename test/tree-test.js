@@ -29,6 +29,11 @@ function reencode(tree, proof) {
   return Proof.decode(raw, tree.hash, tree.bits);
 }
 
+function rejson(tree, proof) {
+  const json = proof.toJSON(tree.hash, tree.bits);
+  return Proof.fromJSON(json, tree.hash, tree.bits);
+}
+
 function verify(root, key, proof) {
   return proof.verify(root, key, sha256, 160);
 }
@@ -89,6 +94,7 @@ async function runTest() {
     const ss = tree.snapshot(first);
     const proof = await ss.prove(FOO2);
     assert.deepStrictEqual(reencode(tree, proof), proof);
+    assert.deepStrictEqual(rejson(tree, proof), proof);
     const [code, data] = verify(first, FOO2, proof);
     assert.strictEqual(code, 0);
     assert.bufferEqual(data, BAR2);
@@ -99,6 +105,7 @@ async function runTest() {
     const ss = tree.snapshot(first);
     const proof = await ss.prove(FOO5);
     assert.deepStrictEqual(reencode(tree, proof), proof);
+    assert.deepStrictEqual(rejson(tree, proof), proof);
     const [code, data] = verify(first, FOO5, proof);
     assert.strictEqual(code, 0);
     assert.strictEqual(data, null);
@@ -109,6 +116,7 @@ async function runTest() {
     const ss = tree.snapshot(first);
     const proof = await ss.prove(FOO4);
     assert.deepStrictEqual(reencode(tree, proof), proof);
+    assert.deepStrictEqual(rejson(tree, proof), proof);
     const [code, data] = verify(first, FOO4, proof);
     assert.strictEqual(code, 0);
     assert.strictEqual(data, null);
@@ -119,6 +127,7 @@ async function runTest() {
     const ss = tree.snapshot();
     const proof = await ss.prove(FOO2);
     assert.deepStrictEqual(reencode(tree, proof), proof);
+    assert.deepStrictEqual(rejson(tree, proof), proof);
     const [code, data] = verify(tree.rootHash(), FOO2, proof);
     assert.strictEqual(code, 0);
     assert.bufferEqual(data, BAR2);
@@ -129,6 +138,7 @@ async function runTest() {
     const ss = tree.snapshot();
     const proof = await tree.prove(FOO5);
     assert.deepStrictEqual(reencode(tree, proof), proof);
+    assert.deepStrictEqual(rejson(tree, proof), proof);
     const [code, data] = verify(tree.rootHash(), FOO5, proof);
     assert.strictEqual(code, 0);
     assert.strictEqual(data, null);
@@ -139,6 +149,7 @@ async function runTest() {
     const ss = tree.snapshot();
     const proof = await tree.prove(FOO4);
     assert.deepStrictEqual(reencode(tree, proof), proof);
+    assert.deepStrictEqual(rejson(tree, proof), proof);
     const [code, data] = verify(tree.rootHash(), FOO4, proof);
     assert.strictEqual(code, 0);
     assert.strictEqual(data, null);
