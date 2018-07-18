@@ -11,8 +11,8 @@ const {Tree} = require('../');
 const util = require('./util');
 
 const BLOCKS = +process.argv[3] || 10000;
-const PER_BLOCK = +process.argv[4] || 500;
-const INTERVAL = +process.argv[5] || 88;
+const PER_BLOCK = +process.argv[4] || 300;
+const INTERVAL = +process.argv[5] || 72;
 const RATE = Math.floor(BLOCKS / 1000);
 const TOTAL = BLOCKS * PER_BLOCK;
 const FILE = Path.resolve(__dirname, 'treedb');
@@ -73,20 +73,14 @@ async function stress(prefix) {
       for (const [k, v] of pairs)
         await batch.insert(k, v);
 
+      batch.rootHash();
+
       console.log('Insertion: %d', util.now() - now);
     }
 
     const [key, value] = pairs.pop();
 
     pairs.length = 0;
-
-    {
-      const now = util.now();
-
-      batch.rootHash();
-
-      console.log('Hashing: %d', util.now() - now);
-    }
 
     if (i === 0)
       continue;
