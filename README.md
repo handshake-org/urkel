@@ -73,10 +73,11 @@ for (let i = 0; i < 500; i++) {
   key = k;
 }
 
-await txn.commit();
+// Commit and get the new root.
+const root = await txn.commit();
+const snapshot = tree.snapshot(root);
 
-const snapshot = tree.snapshot();
-const root = snapshot.rootHash();
+// Prove a key/value from our snapshotted root.
 const proof = await snapshot.prove(key);
 const [code, value] = proof.verify(root, key, Blake2b, 256);
 
