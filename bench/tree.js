@@ -3,7 +3,7 @@
 
 'use strict';
 
-const assert = require('assert');
+const assert = require('../test/util/assert');
 const Path = require('path');
 const crypto = require('crypto');
 const blake2b = require('bcrypto/lib/blake2b');
@@ -13,7 +13,6 @@ const util = require('./util');
 const BLOCKS = +process.argv[3] || 10000;
 const PER_BLOCK = +process.argv[4] || 300;
 const INTERVAL = +process.argv[5] || 72;
-const RATE = Math.floor(BLOCKS / 1000);
 const TOTAL = BLOCKS * PER_BLOCK;
 const FILE = Path.resolve(__dirname, 'treedb');
 
@@ -24,7 +23,6 @@ function verify(root, key, proof) {
 async function stress(prefix) {
   const tree = new Tree(blake2b, 256, prefix);
   const store = tree.store;
-  const items = [];
 
   await tree.open();
 
@@ -100,9 +98,6 @@ async function stress(prefix) {
       await doProof(tree, i, key, value);
     }
 
-    if ((i % RATE) === 0)
-      items.push([key, value]);
-
     if ((i % 100) === 0)
       console.log('Keys: %d', i * PER_BLOCK);
   }
@@ -110,11 +105,6 @@ async function stress(prefix) {
   console.log('Total Items: %d.', TOTAL);
   console.log('Blocks: %d.', BLOCKS);
   console.log('Items Per Block: %d.', PER_BLOCK);
-
-  for (let i = 0; i < items.length; i++) {
-    const [key, value] = items[i];
-    await doProof(tree, i, key, value);
-  }
 
   return tree.close();
 }
@@ -129,23 +119,20 @@ async function doProof(tree, i, key, expect) {
   for (const node of proof.nodes)
     size += node.length;
 
-  if (proof.key)
-    size += proof.key.length;
-
-  let vsize = 0;
-
-  if (proof.value)
-    vsize = 1 + proof.value.length;
+  size += proof.value.length;
 
   const [code, value] = verify(tree.rootHash(), key, proof);
-  assert(code === 0);
-  assert(value && value.length === 300);
-  assert(value.equals(expect));
+
+  assert.strictEqual(code, 0);
+  assert.notStrictEqual(value, null);
+  assert(Buffer.isBuffer(value));
+  assert.strictEqual(value.length, 300);
+  assert.bufferEqual(value, expect);
 
   console.log('Proof %d length: %d', i, proof.nodes.length);
   console.log('Proof %d size: %d', i, size);
   console.log('Proof %d compressed size: %d',
-    i, proof.getSize(tree.hash, tree.bits) - vsize);
+    i, proof.getSize(tree.hash, tree.bits));
 }
 
 async function bench(prefix) {
@@ -207,7 +194,9 @@ async function bench(prefix) {
   {
     const now = util.now();
 
-    for (const [i, [key]] of items.entries()) {
+    for (let i = 0; i < items.length; i++) {
+      const [key] = items[i];
+
       if (i & 1)
         await batch.remove(key);
     }
