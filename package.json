@@ -15,39 +15,20 @@
   "author": "Christopher Jeffrey <chjjeffrey@gmail.com>",
   "main": "./lib/urkel.js",
   "scripts": {
-    "browserify": "browserify -s urkel lib/urkel.js | uglifyjs -c > urkel.js",
-    "clean": "rm -f urkel.js",
     "lint": "eslint lib/ bench/ test/ || exit 0",
     "test": "mocha --reporter spec test/*-test.js",
-    "test-file": "mocha --reporter spec",
-    "webpack": "webpack --mode production --config webpack.config.js"
+    "test-file": "mocha --reporter spec"
   },
   "dependencies": {
-    "bfile": "~0.1.0",
-    "bmutex": "~0.1.1"
+    "bfile": "~0.1.1",
+    "bmutex": "~0.1.2",
+    "bsert": "~0.0.3"
   },
   "devDependencies": {
-    "babel-core": "^6.26.3",
-    "babel-loader": "^7.1.4",
-    "babel-plugin-transform-runtime": "^6.23.0",
-    "babel-polyfill": "^6.26.0",
-    "babel-preset-env": "^1.7.0",
-    "babelify": "^8.0.0",
-    "blru": "~0.1.1",
-    "browserify": "^16.2.2",
-    "eslint": "^4.19.1",
-    "mocha": "^5.2.0",
-    "uglify-es": "^3.3.9",
-    "uglifyjs-webpack-plugin": "^1.2.5",
-    "webpack": "^4.11.1",
-    "webpack-cli": "^3.0.3"
+    "eslint": "^5.1.0",
+    "mocha": "^5.2.0"
   },
   "engines": {
     "node": ">=8.0.0"
-  },
-  "browserify": {
-    "transform": [
-      "babelify"
-    ]
   }
 }
