@@ -116,8 +116,8 @@ async function doProof(tree, i, key, expect) {
   console.log('Proof %d time: %d.', i, util.now() - now);
 
   let size = 0;
-  for (const node of proof.nodes)
-    size += node.length;
+  for (const {prefix, node} of proof.nodes)
+    size += 2 + prefix.data.length + node.length;
 
   size += proof.value.length;
 
@@ -129,6 +129,7 @@ async function doProof(tree, i, key, expect) {
   assert.strictEqual(value.length, 300);
   assert.bufferEqual(value, expect);
 
+  console.log('Proof %d depth: %d', i, proof.depth);
   console.log('Proof %d length: %d', i, proof.nodes.length);
   console.log('Proof %d size: %d', i, size);
   console.log('Proof %d compressed size: %d',
