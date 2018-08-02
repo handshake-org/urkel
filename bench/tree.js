@@ -7,12 +7,33 @@ const assert = require('../test/util/assert');
 const Path = require('path');
 const crypto = require('crypto');
 const blake2b = require('bcrypto/lib/blake2b');
-const {Tree} = require('../');
 const util = require('./util');
 
-const BLOCKS = +process.argv[3] || 10000;
-const PER_BLOCK = +process.argv[4] || 300;
-const INTERVAL = +process.argv[5] || 72;
+const argv = process.argv.slice();
+
+let Tree = null;
+
+switch (argv[2]) {
+  case 'optimized':
+    Tree = require('../optimized').Tree;
+    argv.splice(2, 1);
+    break;
+  case 'trie':
+    Tree = require('../trie').Tree;
+    argv.splice(2, 1);
+    break;
+  case 'radix':
+    Tree = require('../radix').Tree;
+    argv.splice(2, 1);
+    break;
+  default:
+    Tree = require('../optimized').Tree;
+    break;
+}
+
+const BLOCKS = +argv[3] || 10000;
+const PER_BLOCK = +argv[4] || 300;
+const INTERVAL = +argv[5] || 72;
 const TOTAL = BLOCKS * PER_BLOCK;
 const FILE = Path.resolve(__dirname, 'treedb');
 
@@ -136,8 +157,7 @@ async function doProof(tree, i, key, expect) {
   assert.strictEqual(value.length, 300);
   assert.bufferEqual(value, expect);
 
-  if (proof.depth != null)
-    console.log('Proof %d depth: %d', i, proof.depth);
+  console.log('Proof %d depth: %d', i, proof.depth);
   console.log('Proof %d length: %d', i, proof.nodes.length);
   console.log('Proof %d size: %d', i, size);
   console.log('Proof %d compressed size: %d',
@@ -259,8 +279,8 @@ async function bench(prefix) {
 }
 
 (async () => {
-  const arg = process.argv.length >= 3
-    ? process.argv[2]
+  const arg = argv.length >= 3
+    ? argv[2]
     : '';
 
   switch (arg) {
