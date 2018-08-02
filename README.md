@@ -138,4 +138,4 @@ See LICENSE for more info.
 [2]: https://github.com/ethereum/wiki/wiki/Patricia-Tree
 [3]: https://github.com/bramcohen/MerkleSet
 [4]: https://www.deadalnix.me/2016/09/24/introducing-merklix-tree-as-an-unordered-merkle-tree-on-steroid/
-[5]: https://handshake.org/paper
+[5]: https://handshake.org/files/handshake.txt
