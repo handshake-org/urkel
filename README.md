@@ -6,9 +6,7 @@ An optimized and cryptographically provable key-value store.
 
 The urkel tree was created for the [Handshake protocol][1], and is implemented
 as a base-2 merkelized trie. It was created as an alternative to [Ethereum's
-base-16 trie][2] (which was the initial choice for Handshake name proofs). The
-design was inspired by Amaury Séchet's [Merklix tree][3] and shares many
-similarities to earlier work done by [Bram Cohen][4].
+base-16 trie][2] (which was the initial choice for Handshake name proofs).
 
 Urkel stores nodes in a series of append-only files for snapshotting and crash
 consistency capabilities. Due to these presence of these features, Urkel has
@@ -45,6 +43,17 @@ commissions are avoided in consensus applications of the tree (i.e. avoid
 committing the tree on every block).
 
 A more in-depth description is available in the [Handshake Whitepaper][5].
+
+## Backends
+
+There are currently three different backends:
+
+- `urkel/trie` - A simple base-2 merkelized trie whose design shares
+  similarities with earlier work done by [Bram Cohen][3].
+- `urkel/radix` - A base-2 merkelized radix tree, similar
+  to Amaury Séchet's [Merklix tree][4].
+- `urkel/optimized` - A memory and storage optimized version of the simplified
+  trie.
 
 ## Usage
 
@@ -127,6 +136,6 @@ See LICENSE for more info.
 
 [1]: https://handshake.org
 [2]: https://github.com/ethereum/wiki/wiki/Patricia-Tree
-[3]: https://www.deadalnix.me/2016/09/24/introducing-merklix-tree-as-an-unordered-merkle-tree-on-steroid/
-[4]: https://github.com/bramcohen/MerkleSet
+[3]: https://github.com/bramcohen/MerkleSet
+[4]: https://www.deadalnix.me/2016/09/24/introducing-merklix-tree-as-an-unordered-merkle-tree-on-steroid/
 [5]: https://handshake.org/paper
