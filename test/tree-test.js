@@ -379,6 +379,91 @@ function runTest(name, Tree, Proof) {
     await tree.close();
   }
 
+  async function history() {
+    const items = [];
+    const removed = [];
+    const remaining = [];
+
+    while (items.length < 10000) {
+      const key = crypto.randomBytes(20);
+      const value = crypto.randomBytes(random(1, 100));
+      items.push([key, value]);
+    }
+
+    const tree1 = new Tree(sha256, 160);
+    await tree1.open();
+
+    const tree2 = new Tree(sha256, 160);
+    await tree2.open();
+
+    let root = null;
+    let fullRoot1 = null;
+    let fullRoot2 = null;
+    let midRoot1 = null;
+    let midRoot2 = null;
+
+    {
+      const batch = tree1.batch();
+
+      for (const [key, value] of items)
+        await batch.insert(key, value);
+
+      root = await batch.commit();
+    }
+
+    {
+      const batch = tree1.batch();
+
+      for (const [key, value] of items) {
+        if (Math.random() < 0.5) {
+          remaining.push([key, value]);
+          continue;
+        }
+
+        await batch.remove(key);
+
+        removed.push([key, value]);
+      }
+
+      midRoot1 = await batch.commit();
+    }
+
+    {
+      const batch = tree1.batch();
+
+      for (const [key, value] of removed)
+        await batch.insert(key, value);
+
+      fullRoot1 = await batch.commit();
+    }
+
+    {
+      const batch = tree2.batch();
+
+      for (const [key, value] of remaining)
+        await batch.insert(key, value);
+
+      midRoot2 = await batch.commit();
+    }
+
+    {
+      const batch = tree2.batch();
+
+      for (const [key, value] of removed)
+        await batch.insert(key, value);
+
+      fullRoot2 = await batch.commit();
+    }
+
+    assert.bufferEqual(fullRoot1, root);
+    assert.bufferEqual(fullRoot2, root);
+    assert.bufferEqual(fullRoot1, fullRoot2);
+    assert.bufferEqual(midRoot1, midRoot2);
+
+    await tree1.close();
+    await tree2.close();
+  }
+
   describe(name, function() {
     this.timeout(5000);
 
@@ -388,6 +473,10 @@ function runTest(name, Tree, Proof) {
 
     it('should pummel tree', async () => {
       await pummel();
+    });
+
+    it('should test history independence', async () => {
+      await history();
     });
   });
 }
