@@ -52,7 +52,7 @@ class SHA1 {
   }
 }
 
-SHA1.id = 'sha1';
+SHA1.id = 'SHA1';
 SHA1.size = 20;
 SHA1.bits = 160;
 SHA1.blockSize = 64;
@@ -108,7 +108,7 @@ class SHA256 {
   }
 }
 
-SHA256.id = 'sha256';
+SHA256.id = 'SHA256';
 SHA256.size = 32;
 SHA256.bits = 256;
 SHA256.blockSize = 64;

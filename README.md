@@ -60,12 +60,12 @@ There are currently three different backends:
 ``` js
 const bcrypto = require('bcrypto');
 const urkel = require('urkel');
-const {Blake2b, randomBytes} = bcrypto;
+const {BLAKE2b, randomBytes} = bcrypto;
 const {Tree, Proof} = urkel;
 
 // Create a tree using blake2b-256
 // and a depth/key-size of 256 bits.
-const tree = new Tree(Blake2b, 256, '/path/to/my/db');
+const tree = new Tree(BLAKE2b, 256, '/path/to/my/db');
 
 await tree.open();
 
@@ -88,7 +88,7 @@ const snapshot = tree.snapshot(root);
 
 // Prove a key/value from our snapshotted root.
 const proof = await snapshot.prove(key);
-const [code, value] = proof.verify(root, key, Blake2b, 256);
+const [code, value] = proof.verify(root, key, BLAKE2b, 256);
 
 if (code !== 0) {
   console.log('Could not verify proof: %s.', Proof.code(code));
