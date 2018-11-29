@@ -16,8 +16,8 @@
   "main": "./lib/urkel.js",
   "scripts": {
     "lint": "eslint lib/ bench/ test/ || exit 0",
-    "test": "mocha --reporter spec test/*-test.js",
-    "test-file": "mocha --reporter spec"
+    "test": "bmocha --reporter spec test/*-test.js",
+    "test-file": "bmocha --reporter spec"
   },
   "dependencies": {
     "bfile": "~0.1.2",
@@ -25,7 +25,7 @@
     "bsert": "~0.0.4"
   },
   "devDependencies": {
-    "mocha": "^5.2.0"
+    "bmocha": "^0.1.0"
   },
   "engines": {
     "node": ">=8.0.0"
