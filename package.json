@@ -1,6 +1,6 @@
 {
   "name": "urkel",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "description": "Cryptographically provable database",
   "keywords": [
     "net",
@@ -20,9 +20,9 @@
     "test-file": "bmocha --reporter spec"
   },
   "dependencies": {
-    "bfile": "~0.2.0",
-    "bmutex": "~0.1.5",
-    "bsert": "~0.0.9"
+    "bfile": "~0.2.1",
+    "bmutex": "~0.1.6",
+    "bsert": "~0.0.10"
   },
   "devDependencies": {
     "bmocha": "^2.1.0"
