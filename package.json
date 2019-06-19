@@ -21,9 +21,11 @@
     "test-file": "bmocha --reporter spec"
   },
   "dependencies": {
+    "babel-eslint": "^10.0.2",
     "bfile": "~0.2.1",
     "bmutex": "~0.1.6",
     "bsert": "~0.0.10",
+    "eslint": "^5.16.0",
     "mocha": "^6.1.4"
   },
   "devDependencies": {
