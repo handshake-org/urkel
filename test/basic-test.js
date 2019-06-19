@@ -479,6 +479,7 @@ function runTest(name, Tree, Proof) {
       await test();
     });
 
+
     it('should pummel tree', async () => {
       await pummel();
     });
@@ -488,6 +489,8 @@ function runTest(name, Tree, Proof) {
     });
   });
 }
+
+
 
 {
   const {Tree, Proof} = require('../optimized');

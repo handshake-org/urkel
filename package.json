@@ -16,16 +16,20 @@
   "main": "./lib/urkel.js",
   "scripts": {
     "lint": "eslint lib/ bench/ test/ || exit 0",
-    "test": "bmocha --reporter spec test/*-test.js",
+    "test": "nyc --reporter=html --reporter=text mocha",
+    "coverage": "nyc report --reporter=text-lcov | coveralls",
     "test-file": "bmocha --reporter spec"
   },
   "dependencies": {
     "bfile": "~0.2.1",
     "bmutex": "~0.1.6",
-    "bsert": "~0.0.10"
+    "bsert": "~0.0.10",
+    "mocha": "^6.1.4"
   },
   "devDependencies": {
-    "bmocha": "^2.1.2"
+    "bmocha": "^2.1.2",
+    "coveralls": "^3.0.4",
+    "nyc": "^14.1.1"
   },
   "engines": {
     "node": ">=8.0.0"
