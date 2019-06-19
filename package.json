@@ -7,8 +7,8 @@
     "tcp"
   ],
   "license": "MIT",
-  "repository": "git://github.com/handshake-org/urkel.git",
-  "homepage": "https://github.com/handshake-org/urkel",
+  "repository": "",
+  "homepage": "",
   "bugs": {
     "url": "https://github.com/handshake-org/urkel/issues"
   },
