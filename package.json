@@ -25,7 +25,7 @@
     "bsert": "~0.0.10"
   },
   "devDependencies": {
-    "bmocha": "^2.1.0"
+    "bmocha": "^2.1.2"
   },
   "engines": {
     "node": ">=8.0.0"
