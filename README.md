@@ -1,5 +1,14 @@
 # Urkel Tree
 
+<!-- 
+Code Coverage
+Testing 
+CI
+Pull Requests
+Licensing 
+-->
+
+
 An optimized and cryptographically provable key-value store.
 
 ## Design
@@ -128,14 +137,10 @@ If you contribute code to this project, you are implicitly allowing your code
 to be distributed under the MIT license. You are also implicitly verifying that
 all code is your original work. `</legalese>`
 
+
+
 ## License
 
 - Copyright (c) 2018, Christopher Jeffrey (MIT License).
 
 See LICENSE for more info.
-
-[1]: https://handshake.org
-[2]: https://github.com/ethereum/wiki/wiki/Patricia-Tree
-[3]: https://github.com/bramcohen/MerkleSet
-[4]: https://www.deadalnix.me/2016/09/24/introducing-merklix-tree-as-an-unordered-merkle-tree-on-steroid/
-[5]: https://handshake.org/files/handshake.txt
