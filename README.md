@@ -1,5 +1,7 @@
 # Urkel Tree
 
+
+[![CircleCI](https://circleci.com/gh/chasesmith95/urkel.svg?style=svg)](https://circleci.com/gh/chasesmith95/urkel)
 <!-- 
 Code Coverage
 Testing 
