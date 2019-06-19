@@ -20,6 +20,11 @@ Inspiration from https://developers.coinbase.com/api/v2?javascript#introduction
 
 ## Configuration
 
+```
+
+
+
+```
 
 
 ## Opening a Database
@@ -57,6 +62,10 @@ Inspiration from https://developers.coinbase.com/api/v2?javascript#introduction
 ## Synchronous vs Asynchronous 
 
 ## Performance
+
+## Proofs
+
+### Pr
 
 
 
