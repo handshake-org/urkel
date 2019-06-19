@@ -12,6 +12,12 @@ Inspiration from https://developers.coinbase.com/api/v2?javascript#introduction
 
 ## Error Codes
 
+```
+
+
+
+```
+
 ## Configuration
 
 
