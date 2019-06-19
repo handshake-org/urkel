@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "babel-eslint": "^10.0.2",
+    "bcrypto": "^4.0.1",
     "bfile": "~0.2.1",
     "bmutex": "~0.1.6",
     "bsert": "~0.0.10",
