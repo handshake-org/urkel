@@ -10,7 +10,9 @@ Inspiration from https://developers.coinbase.com/api/v2?javascript#introduction
 ## Introduction 
 
 
-## Status Codes
+## Error Codes
+
+## Configuration
 
 
 
@@ -20,10 +22,35 @@ Inspiration from https://developers.coinbase.com/api/v2?javascript#introduction
 ## Creating a Database 
 
 
-## Requests
+
+## Basic Requests
 
 ### Get 
 
 ### Put 
 
 ### Remove 
+
+### Iterator
+
+### Range
+
+## Batching
+
+### Checkout
+
+### Usage 
+
+### Commit 
+
+
+## Snapshots
+
+## Compaction
+
+## Synchronous vs Asynchronous 
+
+## Performance
+
+
+
