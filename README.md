@@ -11,6 +11,9 @@ Licensing
 -->
 
 
+[![Coverage Status](https://coveralls.io/repos/github/chasesmith95/urkel/badge.svg?branch=master)](https://coveralls.io/github/chasesmith95/urkel?branch=master)
+
+
 An optimized and cryptographically provable key-value store.
 
 ## Design
