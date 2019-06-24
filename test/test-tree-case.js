@@ -51,7 +51,7 @@ async function setup() {
   var n = d.getMilliseconds();
   var n1 = d.getSeconds();
   var n2 = d.getMinutes();
-  console.log(n2, n1, n);
+  //console.log(n2, n1, n);
 
 
   for (let j = 0; j < 200000; j++) {
@@ -67,7 +67,7 @@ async function setup() {
   n = d.getMilliseconds();
   n1 = d.getSeconds();
   n2 = d.getMinutes();
-  console.log(n2, n1, n);
+  //console.log(n2, n1, n);
 }
 
 
@@ -77,15 +77,15 @@ async function iteratorTest() {
   var n = d.getMilliseconds();
   var n1 = d.getSeconds();
   var n2 = d.getMinutes();
-  console.log(n2, n1, n);
+  //console.log(n2, n1, n);
 
   let tree = await create("Test_Index");
   const iter = tree.iterator(true, true);
 
   while (await iter.next()) {
     const {key, v} = await iter;
-    console.log(pack(key))
-    console.log(v)
+    //console.log(pack(key))
+    //console.log(v)
     //console.log('Iterated over item:');
     //console.log('%s: %s', pack(key));
   }
@@ -93,7 +93,7 @@ async function iteratorTest() {
   var n = d.getMilliseconds();
   var n1 = d.getSeconds();
   var n2 = d.getMinutes();
-  console.log(n2, n1, n);
+  //console.log(n2, n1, n);
 
 }
 
@@ -104,9 +104,9 @@ async function iteratorTest() {
 
 
 async function main() {
-    console.log("Setup")
+    //console.log("Setup")
     await setup()
-    console.log("Iterator Test")
+    //console.log("Iterator Test")
     //await iteratorTest()
 
 }

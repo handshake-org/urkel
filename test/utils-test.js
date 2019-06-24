@@ -38,12 +38,21 @@ function runTest(name, Tree, Proof) {
     return proof.verify(root, key, sha256, 160);
   }
 
-  async function test() {
-    const tree = new Tree(sha256, 160);
 
+
+
+
+  async function errors() {
+    assert.throws(() => { var tree = new Tree(sha256, 160, 5555)}, Error, "Error thrown")
+
+    const tree = new Tree(sha256, 160)
     await tree.open();
 
     const batch = tree.batch();
+
+
+    //assert.throws(async () => { await tree.get("hello")}, Error, "Error thrown")
+
 
     // Insert some values.
     await batch.insert(FOO1, BAR1);
@@ -206,288 +215,16 @@ function runTest(name, Tree, Proof) {
 
 
 
-
-
-  async function pummel() {
-    const tree = new Tree(sha256, 160);
-    const items = [];
-    const set = new Set();
-
-    await tree.open();
-
-    let batch = tree.batch();
-
-    while (set.size < 10000) {
-      const key = crypto.randomBytes(tree.bits >>> 3);
-      const value = crypto.randomBytes(random(1, 100));
-      const key1 = key.toString('binary');
-
-      if (set.has(key1))
-        continue;
-
-      key[key.length - 1] ^= 1;
-
-      const key2 = key.toString('binary');
-
-      key[key.length - 1] ^= 1;
-
-      if (set.has(key2))
-        continue;
-
-      set.add(key1);
-
-      items.push([key, value]);
-    }
-
-    set.clear();
-
-    let midRoot = null;
-    let lastRoot = null;
-
-    {
-      for (const [i, [key, value]] of items.entries()) {
-        await batch.insert(key, value);
-        if (i === (items.length >>> 1) - 1)
-          midRoot = batch.rootHash();
-      }
-
-      const root = await batch.commit();
-      lastRoot = root;
-
-      for (const [key, value] of items) {
-        assert.bufferEqual(await tree.get(key), value);
-
-        key[key.length - 1] ^= 1;
-        assert.strictEqual(await tree.get(key), null);
-        key[key.length - 1] ^= 1;
-      }
-
-      await tree.close();
-      await tree.open();
-
-      assert.bufferEqual(tree.rootHash(), root);
-    }
-
-    for (const [key, value] of items) {
-      assert.bufferEqual(await tree.get(key), value);
-
-      key[key.length - 1] ^= 1;
-      assert.strictEqual(await tree.get(key), null);
-      key[key.length - 1] ^= 1;
-    }
-
-    items.reverse();
-
-    for (const [i, [key]] of items.entries()) {
-      if (i < (items.length >>> 1))
-        await batch.remove(key);
-    }
-
-    {
-      const root = await batch.commit();
-
-      await tree.close();
-      await tree.open();
-
-      assert.bufferEqual(tree.rootHash(), root);
-      assert.bufferEqual(tree.rootHash(), midRoot);
-    }
-
-    for (const [i, [key, value]] of items.entries()) {
-      const val = await tree.get(key);
-
-      if (i < (items.length >>> 1))
-        assert.strictEqual(val, null);
-      else
-        assert.bufferEqual(val, value);
-    }
-
-    {
-      const root = await batch.commit();
-
-      await tree.close();
-      await tree.open();
-
-      assert.bufferEqual(tree.rootHash(), root);
-    }
-
-    {
-      const expect = [];
-
-      for (const [i, item] of items.entries()) {
-        if (i < (items.length >>> 1))
-          continue;
-
-        expect.push(item);
-      }
-
-      expect.sort((a, b) => {
-        const [x] = a;
-        const [y] = b;
-        return x.compare(y);
-      });
-
-      let i = 0;
-
-      for await (const [key, value] of tree) {
-        const [k, v] = expect[i];
-
-        assert.bufferEqual(key, k);
-        assert.bufferEqual(value, v);
-
-        i += 1;
-      }
-
-      assert.strictEqual(i, items.length >>> 1);
-    }
-
-    for (let i = 0; i < items.length; i += 11) {
-      const [key, value] = items[i];
-
-      const root = tree.rootHash();
-      const proof = await tree.prove(key);
-      const [code, data] = verify(root, key, proof);
-
-      assert.strictEqual(code, 0);
-
-      if (i < (items.length >>> 1))
-        assert.strictEqual(data, null);
-      else
-        assert.bufferEqual(data, value);
-    }
-
-    {
-      const stat1 = await tree.store.stat();
-      await tree.compact();
-      const stat2 = await tree.store.stat();
-      assert(stat1.size > stat2.size);
-    }
-
-    const rand = items.slice(0, items.length >>> 1);
-
-    rand.sort((a, b) => Math.random() >= 0.5 ? 1 : -1);
-
-    batch = tree.batch();
-
-    for (const [i, [key, value]] of rand.entries())
-      await batch.insert(key, value);
-
-    {
-      assert.bufferEqual(batch.rootHash(), lastRoot);
-
-      const root = await batch.commit();
-
-      await tree.close();
-      await tree.open();
-
-      assert.bufferEqual(tree.rootHash(), root);
-      assert.bufferEqual(tree.rootHash(), lastRoot);
-    }
-
-    await tree.close();
-  }
-
-  async function history() {
-    const items = [];
-    const removed = [];
-    const remaining = [];
-
-    while (items.length < 10000) {
-      const key = crypto.randomBytes(20);
-      const value = crypto.randomBytes(random(1, 100));
-      items.push([key, value]);
-    }
-
-    const tree1 = new Tree(sha256, 160);
-    await tree1.open();
-
-    const tree2 = new Tree(sha256, 160);
-    await tree2.open();
-
-    let root = null;
-    let fullRoot1 = null;
-    let fullRoot2 = null;
-    let midRoot1 = null;
-    let midRoot2 = null;
-
-    {
-      const batch = tree1.batch();
-
-      for (const [key, value] of items)
-        await batch.insert(key, value);
-
-      root = await batch.commit();
-    }
-
-    {
-      const batch = tree1.batch();
-
-      for (const [key, value] of items) {
-        if (Math.random() < 0.5) {
-          remaining.push([key, value]);
-          continue;
-        }
-
-        await batch.remove(key);
-
-        removed.push([key, value]);
-      }
-
-      midRoot1 = await batch.commit();
-    }
-
-    {
-      const batch = tree1.batch();
-
-      for (const [key, value] of removed)
-        await batch.insert(key, value);
-
-      fullRoot1 = await batch.commit();
-    }
-
-    {
-      const batch = tree2.batch();
-
-      for (const [key, value] of remaining)
-        await batch.insert(key, value);
-
-      midRoot2 = await batch.commit();
-    }
-
-    {
-      const batch = tree2.batch();
-
-      for (const [key, value] of removed)
-        await batch.insert(key, value);
-
-      fullRoot2 = await batch.commit();
-    }
-
-    assert.bufferEqual(fullRoot1, root);
-    assert.bufferEqual(fullRoot2, root);
-    assert.bufferEqual(fullRoot1, fullRoot2);
-    assert.bufferEqual(midRoot1, midRoot2);
-
-    await tree1.close();
-    await tree2.close();
-  }
-
   describe(name, function() {
     this.timeout(5000);
 
-    it('should test tree', async () => {
-      await test();
-    });
-
-    it('should pummel tree', async () => {
-      await pummel();
-    });
-
-    it('should test history independence', async () => {
-      await history();
+    it('should test errors', async () => {
+      await errors();
     });
   });
 }
+
+
 
 {
   const {Tree, Proof} = require('../optimized');
