@@ -27,10 +27,7 @@ Test mkdirpSync
 */
 async function mkdirpSyncTest() {
   let mfs = new MFS();
-
   assert(await mfs.mkdirpSync('', null), null, "Should return null for empty path")
-
-
 }
 
 
