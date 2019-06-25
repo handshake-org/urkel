@@ -14,6 +14,11 @@
   },
   "author": "Christopher Jeffrey <chjjeffrey@gmail.com>",
   "main": "./lib/urkel.js",
+  "nyc": {
+    "exclude": [
+      "**/errors.js", "**/test/**",  "**/file.js"
+    ]
+  },
   "scripts": {
     "lint": "eslint lib/ bench/ test/ || exit 0",
     "test": "nyc --reporter=html --reporter=text mocha",
@@ -27,6 +32,7 @@
     "bmutex": "~0.1.6",
     "bsert": "~0.0.10",
     "eslint": "^5.16.0",
+    "istanbul": "^0.4.5",
     "mocha": "^6.1.4",
     "randombytes": "^2.1.0"
   },

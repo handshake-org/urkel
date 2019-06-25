@@ -22,7 +22,9 @@ const {
   serializeU32,
   EMPTY,
   randomPath,
+  readU16,
   readU32,
+  writeU16,
   writeU32,
   hashValue,
   randomBytes,
@@ -35,9 +37,9 @@ const {
 } = errors;
 
 const {
-  Pointer,
   NIL,
-  decodeNode
+  Internal,
+  Leaf
 } = nodes;
 
 /*
@@ -51,15 +53,12 @@ const MAX_FILES = 0x7fff; // DB max = 64 TB.
 // const MAX_FILES = 0x7fffff; // DB max = 16 PB.
 // const MAX_FILES = 0x7fffffff; // DB max = 4 EB.
 const MAX_OPEN_FILES = 32;
-const META_SIZE = 4 + (Pointer.getSize() * 2) + 20;
-const MAX_WRITE = 1024 + 0xffff + 1024 + META_SIZE;
+const META_SIZE = 4 + 2 + 4 + 2 + 4 + 20;
 const META_MAGIC = 0x6d726b6c;
 const WRITE_BUFFER = 64 << 20;
 const READ_BUFFER = 1 << 20;
-
-const KEY_SIZE = 32;
-
 const SLAB_SIZE = READ_BUFFER - (READ_BUFFER % META_SIZE);
+const KEY_SIZE = 32;
 const ZERO_KEY = Buffer.alloc(KEY_SIZE, 0x00);
 
 /**
@@ -78,6 +77,10 @@ class Store {
     this.prefix = prefix;
     this.hash = hash;
     this.bits = bits;
+
+    this.nodeSize = Internal.getSize(hash, bits);
+    this.leafSize = Leaf.getSize(hash, bits);
+    this.maxWrite = this.leafSize + 0xffff + this.nodeSize + META_SIZE;
 
     this.lockFile = new LockFile(fs, prefix);
     this.openLock = new MapLock();
@@ -206,7 +209,7 @@ class Store {
     await this.lockFile.open();
 
     this.state = state;
-    this.index = state.metaPtr.index || 1;
+    this.index = state.metaIndex || 1;
     this.lastMeta = meta;
     this.current = await this.openFile(this.index, 'a+');
     this.start();
@@ -497,20 +500,26 @@ class Store {
     return this.current.sync();
   }
 
-  decodeNode(data, ptr) {
-    const node = decodeNode(data, this.hash, this.bits);
-    node.ptr = ptr;
+  decodeNode(data, index, pos, leaf) {
+    const Node = leaf ? Leaf : Internal;
+    const node = Node.decode(data, this.hash, this.bits);
+
+    node.index = index;
+    node.pos = pos;
+
     return node;
   }
 
-  async readNode(ptr) {
-    const data = await this.read(ptr.index, ptr.pos, ptr.size);
-    return this.decodeNode(data, ptr);
+  async readNode(index, pos, leaf) {
+    const size = leaf ? this.leafSize : this.nodeSize;
+    const data = await this.read(index, pos, size);
+    return this.decodeNode(data, index, pos, leaf);
   }
 
-  readNodeSync(ptr) {
-    const data = this.readSync(ptr.index, ptr.pos, ptr.size);
-    return this.decodeNode(data, ptr);
+  readNodeSync(index, pos, leaf) {
+    const size = leaf ? this.leafSize : this.nodeSize;
+    const data = this.readSync(index, pos, size);
+    return this.decodeNode(data, index, pos, leaf);
   }
 
   start() {
@@ -523,9 +532,11 @@ class Store {
 
   writeNode(node) {
     assert(node.isInternal() || node.isLeaf());
-    assert(!node.ptr);
+    assert(node.index === 0);
 
-    const size = node.getSize(this.hash, this.bits);
+    const size = node.isLeaf()
+      ? this.leafSize
+      : this.nodeSize;
 
     this.buffer.expand(size);
 
@@ -542,27 +553,24 @@ class Store {
 
     this.buffer.written += size;
 
-    const pos = this.buffer.position(written);
-    const index = this.buffer.index;
+    node.pos = this.buffer.position(written);
+    node.index = this.buffer.index;
 
-    node.mark(index, pos, size);
-
-    return pos;
+    return node.pos;
   }
 
   writeValue(node) {
     assert(node.isLeaf());
-    assert(!node.ptr);
+    assert(node.index === 0);
     assert(node.value);
-    const size = node.value.length;
-    const pos = this.buffer.write(node.value);
-    const index = this.buffer.index;
-    node.save(index, pos, size);
-    return pos;
+    node.vsize = node.value.length;
+    node.vpos = this.buffer.write(node.value);
+    node.vindex = this.buffer.index;
+    return node.vpos;
   }
 
   needsFlush() {
-    return this.buffer.written >= WRITE_BUFFER - MAX_WRITE;
+    return this.buffer.written >= WRITE_BUFFER - this.maxWrite;
   }
 
   async flush() {
@@ -592,8 +600,9 @@ class Store {
 
     const state = this.state.clone();
 
-    assert(root.ptr);
-    state.rootPtr = root.ptr;
+    state.rootIndex = root.index;
+    state.rootPos = root.pos;
+    state.rootLeaf = root.leaf;
     state.rootNode = root.toHash(this.hash);
 
     const padding = META_SIZE - (this.buffer.pos % META_SIZE);
@@ -612,8 +621,8 @@ class Store {
 
     this.buffer.written += META_SIZE;
 
-    state.metaPtr.index = this.buffer.index;
-    state.metaPtr.pos = this.buffer.pos - META_SIZE;
+    state.metaIndex = this.buffer.index;
+    state.metaPos = this.buffer.pos - META_SIZE;
 
     return state;
   }
@@ -690,8 +699,8 @@ class Store {
 
       if (meta) {
         const state = meta.clone();
-        state.metaPtr.index = index;
-        state.metaPtr.pos = off;
+        state.metaIndex = index;
+        state.metaPos = off;
 
         return [state, meta];
       }
@@ -704,8 +713,8 @@ class Store {
     return [new Meta(), new Meta()];
   }
 
-  async readMeta(ptr) {
-    const data = await this.read(ptr.index, ptr.pos, META_SIZE);
+  async readMeta(index, pos) {
+    const data = await this.read(index, pos, META_SIZE);
     return Meta.decode(data, this.hash, this.key);
   }
 
@@ -716,16 +725,16 @@ class Store {
     if (this.state.rootNode)
       return this.state.rootNode;
 
-    const {rootPtr} = this.state;
+    const {rootIndex, rootPos, rootLeaf} = this.state;
 
-    return this.readRoot(rootPtr);
+    return this.readRoot(rootIndex, rootPos, rootLeaf);
   }
 
-  async readRoot(ptr) {
-    if (ptr.index === 0)
+  async readRoot(index, pos, leaf) {
+    if (index === 0)
       return NIL;
 
-    const node = await this.readNode(ptr);
+    const node = await this.readNode(index, pos, leaf);
 
     // Edge case when our root is a leaf.
     // We need to recalculate the hash.
@@ -790,19 +799,19 @@ class Store {
     if (cached)
       return cached;
 
-    let {metaPtr} = this.lastMeta;
+    let {metaIndex, metaPos} = this.lastMeta;
 
     for (;;) {
-      if (metaPtr.index === 0) {
+      if (metaIndex === 0) {
         throw new MissingNodeError({
           rootHash: rootHash,
           nodeHash: rootHash
         });
       }
 
-      const meta = await this.readMeta(metaPtr);
-      const {rootPtr} = meta;
-      const node = await this.readRoot(rootPtr);
+      const meta = await this.readMeta(metaIndex, metaPos);
+      const {rootIndex, rootPos, rootLeaf} = meta;
+      const node = await this.readRoot(rootIndex, rootPos, rootLeaf);
       const hash = node.hash(this.hash);
 
       this.lastMeta = meta;
@@ -810,7 +819,8 @@ class Store {
       if (hash.equals(rootHash))
         return node;
 
-      metaPtr = meta.metaPtr;
+      metaIndex = meta.metaIndex;
+      metaPos = meta.metaPos;
     }
   }
 
@@ -818,8 +828,7 @@ class Store {
     if (!node.isHash())
       return node;
 
-    assert(node.ptr);
-    const rn = await this.readNode(node.ptr);
+    const rn = await this.readNode(node.index, node.pos, node.leaf);
     rn.data = node.data;
     return rn;
   }
@@ -830,21 +839,9 @@ class Store {
     if (node.value)
       return node.value;
 
-    assert(node.vptr);
-    return this.read(node.vptr.index, node.vptr.pos, node.vptr.size);
+    return this.read(node.vindex, node.vpos, node.vsize);
   }
 }
-
-
-
-
-
-
-
-
-
-
-
 
 /**
  * Meta
@@ -852,16 +849,22 @@ class Store {
 
 class Meta {
   constructor() {
-    this.metaPtr = new Pointer();
-    this.rootPtr = new Pointer();
+    this.metaIndex = 0;
+    this.metaPos = 0;
+    this.rootIndex = 0;
+    this.rootPos = 0;
+    this.rootLeaf = 0;
     this.rootNode = null;
   }
 
   clone() {
     const meta = new this.constructor();
-    meta.metaPtr = this.metaPtr.clone();
-    meta.rootPtr = this.rootPtr.clone();
+    meta.metaIndex = this.metaIndex;
+    meta.metaPos = this.metaPos;
+    meta.rootIndex = this.rootIndex;
+    meta.rootPos = this.rootPos;
     meta.rootNode = this.rootNode;
+    meta.rootLeaf = this.rootLeaf;
     return meta;
   }
 
@@ -889,20 +892,20 @@ class Meta {
     assert(Buffer.isBuffer(key));
     assert(key.length === KEY_SIZE);
 
-    const start = off;
+    const rootPos = (this.rootPos * 2) + this.rootLeaf;
 
-    off = writeU32(data, META_MAGIC, off);
-    off = this.metaPtr.write(data, off);
-    off = this.rootPtr.write(data, off);
+    writeU32(data, META_MAGIC, off + 0);
+    writeU16(data, this.metaIndex, off + 4);
+    writeU32(data, this.metaPos, off + 6);
+    writeU16(data, this.rootIndex, off + 10);
+    writeU32(data, rootPos, off + 12);
 
-    const preimage = data.slice(start, off);
+    const preimage = data.slice(off + 0, off + 16);
     const chk = checksum(hash, preimage, key);
 
-    off += chk.copy(data, off, 0, 20);
+    chk.copy(data, off + 16, 0, 20);
 
-    assert((off - start) === META_SIZE);
-
-    return off;
+    return off + META_SIZE;
   }
 
   decode(data, hash, key) {
@@ -919,26 +922,25 @@ class Meta {
     assert(Buffer.isBuffer(key));
     assert(key.length === KEY_SIZE);
 
-    const start = off;
-    const magic = readU32(data, off);
-    off += 4;
+    const magic = readU32(data, off + 0);
 
     if (magic !== META_MAGIC)
       throw new Error('Invalid magic number.');
 
-    this.metaPtr = Pointer.read(data, off);
-    off += this.metaPtr.getSize();
-
-    this.rootPtr = Pointer.read(data, off);
-    off += this.rootPtr.getSize();
-
-    const preimage = data.slice(start, off);
+    const preimage = data.slice(off + 0, off + 16);
     const expect = checksum(hash, preimage, key);
 
-    const chk = data.slice(off, off + 20);
+    const chk = data.slice(off + 16, off + 16 + 20);
 
     if (!chk.equals(expect))
       throw new Error('Invalid metadata checksum.');
+
+    this.metaIndex = readU16(data, off + 4);
+    this.metaPos = readU32(data, off + 6);
+    this.rootIndex = readU16(data, off + 10);
+    this.rootPos = readU32(data, off + 12);
+    this.rootLeaf = this.rootPos & 1;
+    this.rootPos >>>= 1;
 
     return this;
   }
