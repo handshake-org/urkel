@@ -1,3 +1,6 @@
 build/
 node_modules/
 npm-debug.log
+.coveralls.yml
+coverage
+.nyc_output/

@@ -16,7 +16,9 @@
   "main": "./lib/urkel.js",
   "nyc": {
     "exclude": [
-      "**/errors.js", "**/test/**", "**/bits.js"
+      "**/errors.js",
+      "**/test/**",
+      "**/bits.js"
     ]
   },
   "scripts": {
