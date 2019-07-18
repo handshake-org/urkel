@@ -2,8 +2,8 @@ build/
 node_modules/
 npm-debug.log
 .coveralls.yml
-coverage
 db/
+
 .nyc_output/
 bench/treedb/
 bench/.DS_Store
