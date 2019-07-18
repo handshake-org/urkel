@@ -31,8 +31,8 @@ switch (argv[2]) {
     break;
 }
 
-const BLOCKS = +argv[3] || 10000;
-const PER_BLOCK = +argv[4] || 300;
+const BLOCKS = +argv[3] || 10;
+const PER_BLOCK = +argv[4] || 100000;
 const INTERVAL = +argv[5] || 72;
 const TOTAL = BLOCKS * PER_BLOCK;
 const FILE = Path.resolve(__dirname, 'treedb');
@@ -81,7 +81,7 @@ async function stress(prefix) {
 
     for (let j = 0; j < PER_BLOCK; j++) {
       const k = crypto.randomBytes(tree.bits >>> 3);
-      const v = crypto.randomBytes(300);
+      const v = crypto.randomBytes(3000);
 
       pairs.push([k, v]);
     }
@@ -164,6 +164,9 @@ async function doProof(tree, i, key, expect) {
     i, proof.getSize(tree.hash, tree.bits));
 }
 
+
+
+
 async function bench(prefix) {
   const tree = new Tree(blake2b, 256, prefix);
   const items = [];
@@ -172,6 +175,7 @@ async function bench(prefix) {
 
   let batch = tree.batch();
 
+  //Random Reads and Writes
   for (let i = 0; i < 100000; i++) {
     const r = Math.random() > 0.5;
     const key = crypto.randomBytes(tree.bits >>> 3);
@@ -182,7 +186,6 @@ async function bench(prefix) {
 
   {
     const now = util.now();
-
     for (const [key, value] of items)
       await batch.insert(key, value);
 
@@ -191,18 +194,14 @@ async function bench(prefix) {
 
   {
     const now = util.now();
-
     for (const [key] of items)
       assert(await batch.get(key));
-
     console.log('Get (cached): %d.', util.now() - now);
   }
 
   {
     const now = util.now();
-
     await batch.commit();
-
     console.log('Commit: %d.', util.now() - now);
   }
 
@@ -211,10 +210,8 @@ async function bench(prefix) {
 
   {
     const now = util.now();
-
     for (const [key] of items)
       assert(await tree.get(key));
-
     console.log('Get (uncached): %d.', util.now() - now);
   }
 

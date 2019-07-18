@@ -7,25 +7,41 @@
     "tcp"
   ],
   "license": "MIT",
-  "repository": "git://github.com/handshake-org/urkel.git",
-  "homepage": "https://github.com/handshake-org/urkel",
+  "repository": "",
+  "homepage": "",
   "bugs": {
     "url": "https://github.com/handshake-org/urkel/issues"
   },
   "author": "Christopher Jeffrey <chjjeffrey@gmail.com>",
   "main": "./lib/urkel.js",
+  "nyc": {
+    "exclude": [
+      "**/errors.js",
+      "**/test/**",
+      "**/bits.js"
+    ]
+  },
   "scripts": {
     "lint": "eslint lib/ bench/ test/ || exit 0",
-    "test": "bmocha --reporter spec test/*-test.js",
+    "test": "nyc --reporter=html --reporter=text mocha",
+    "coverage": "nyc report --reporter=text-lcov | coveralls",
     "test-file": "bmocha --reporter spec"
   },
   "dependencies": {
+    "babel-eslint": "^10.0.2",
+    "bcrypto": "^4.0.1",
     "bfile": "~0.2.1",
     "bmutex": "~0.1.6",
-    "bsert": "~0.0.10"
+    "bsert": "~0.0.10",
+    "eslint": "^5.16.0",
+    "istanbul": "^0.4.5",
+    "mocha": "^6.1.4",
+    "randombytes": "^2.1.0"
   },
   "devDependencies": {
-    "bmocha": "^2.1.0"
+    "bmocha": "^2.1.2",
+    "coveralls": "^3.0.4",
+    "nyc": "^14.1.1"
   },
   "engines": {
     "node": ">=8.0.0"
