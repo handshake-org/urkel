@@ -27,7 +27,7 @@ trie are:
   bytes, similar to a typical merkle tree proof. This results in an extremely
   compact proof size.
 
-Proof size is the main focus of the Handshake protocol. As name resolutions
+Proof size was the main focus of the Handshake protocol. As name resolutions
 are a frequently requested operation, Handshake required proof sizes less than
 1kb even after hundreds of millions of leaves are present in the tree.
 
