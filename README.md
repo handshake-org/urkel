@@ -9,8 +9,8 @@ as a base-2 merkelized trie. It was created as an alternative to [Ethereum's
 base-16 trie][2] (which was the initial choice for Handshake name proofs).
 
 Urkel stores nodes in a series of append-only files for snapshotting and crash
-consistency capabilities. Due to these presence of these features, Urkel has
-the ability to expose a fully transactional database.
+consistency capabilities. Due to these features, Urkel has the ability to
+expose a fully transactional database.
 
 The primary advantages in using an urkel tree over something like Ethereum's
 trie are:
@@ -27,10 +27,9 @@ trie are:
   bytes, similar to a typical merkle tree proof. This results in an extremely
   compact proof size.
 
-The final benefit was the primary focus of the Handshake protocol. As name
-resolutions are a frequently requested operation, Handshake required proof
-sizes less than 1kb even after hundreds of millions of leaves are present in
-the tree.
+Proof size is the main focus of the Handshake protocol. As name resolutions
+are a frequently requested operation, Handshake required proof sizes less than
+1kb even after hundreds of millions of leaves are present in the tree.
 
 History independence and non-destruction are also inherent properties of the
 urkel tree, just the same as the Ethereum trie. Note that urkel should only be
@@ -130,9 +129,9 @@ all code is your original work. `</legalese>`
 
 ## License
 
-- Copyright (c) 2018, Christopher Jeffrey (MIT License).
+Copyright (c) 2018, Christopher Jeffrey (MIT License).
 
-See LICENSE for more info.
+See [LICENSE](LICENSE) for the full license text.
 
 [1]: https://handshake.org
 [2]: https://github.com/ethereum/wiki/wiki/Patricia-Tree
