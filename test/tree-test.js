@@ -14,6 +14,8 @@ const FOO2 = sha1.digest(Buffer.from('foo2'));
 const FOO3 = sha1.digest(Buffer.from('foo3'));
 const FOO4 = sha1.digest(Buffer.from('foo4'));
 const FOO5 = sha1.digest(Buffer.from('foo5'));
+const FOO6 = sha1.digest(Buffer.from('foo6'));
+const FOO7 = sha1.digest(Buffer.from('foo7'));
 
 const BAR1 = Buffer.from('bar1');
 const BAR2 = Buffer.from('bar2');
@@ -201,6 +203,49 @@ describe('Urkel radix', function() {
     }
 
     await tree.close();
+  });
+
+  it('should test max value', async () => {
+    const MAX_VALUE = 0x3ff;
+    const tree = new Tree(sha256, 160);
+
+    await tree.open();
+
+    // Max Value
+    {
+      const max = Buffer.alloc(MAX_VALUE);
+      const batch = tree.batch();
+
+      await batch.insert(FOO6, max);
+
+      const root = await batch.commit();
+      assert.strictEqual(root.length, tree.hash.size);
+
+      const check = await tree.get(FOO6);
+
+      assert.bufferEqual(check, max);
+    }
+
+    // Max value + 1
+    {
+      let err;
+      try {
+        const maxPlus = Buffer.alloc(MAX_VALUE + 1);
+        const batch = tree.batch();
+
+        await batch.insert(FOO7, maxPlus);
+        const root = await batch.commit();
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err, 'Expected error on max + 1 value.');
+
+      const value = await tree.get(FOO7);
+      assert.strictEqual(value, null, 'Expected FOO7 not to exist.');
+
+      await tree.close();
+    }
   });
 
   it('should pummel tree', async () => {
