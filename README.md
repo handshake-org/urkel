@@ -46,7 +46,7 @@ A more in-depth description is available in the [Handshake Whitepaper][5].
 
 ## Backends
 
-There are currently three different backends:
+There used to be three different backends:
 
 - `urkel/trie` - A simple base-2 merkelized trie whose design shares
   similarities with earlier work done by [Bram Cohen][3].
@@ -54,6 +54,11 @@ There are currently three different backends:
   to Amaury Séchet's [Merklix tree][4].
 - `urkel/optimized` - A memory and storage optimized version of the simplified
   trie.
+
+These can all still be found in the
+[`old-variants`](https://github.com/handshake-org/urkel/tree/old-variants)
+branch of this repository.
+Only the `radix` variant is currently maintained by The Handshake Developers.
 
 ## Usage
 

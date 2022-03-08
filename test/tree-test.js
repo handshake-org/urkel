@@ -482,16 +482,6 @@ function runTest(name, Tree, Proof) {
 }
 
 {
-  const {Tree, Proof} = require('../optimized');
-  runTest('Optimized', Tree, Proof);
-}
-
-{
-  const {Tree, Proof} = require('../trie');
-  runTest('Trie', Tree, Proof);
-}
-
-{
   const {Tree, Proof} = require('../radix');
   runTest('Radix', Tree, Proof);
 }
