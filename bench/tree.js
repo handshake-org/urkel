@@ -11,25 +11,7 @@ const util = require('./util');
 
 const argv = process.argv.slice();
 
-let Tree = null;
-
-switch (argv[2]) {
-  case 'optimized':
-    Tree = require('../optimized').Tree;
-    argv.splice(2, 1);
-    break;
-  case 'trie':
-    Tree = require('../trie').Tree;
-    argv.splice(2, 1);
-    break;
-  case 'radix':
-    Tree = require('../radix').Tree;
-    argv.splice(2, 1);
-    break;
-  default:
-    Tree = require('../optimized').Tree;
-    break;
-}
+const Tree = require('../radix').Tree;
 
 const BLOCKS = +argv[3] || 10000;
 const PER_BLOCK = +argv[4] || 300;
