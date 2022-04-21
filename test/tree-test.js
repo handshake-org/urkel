@@ -7,6 +7,7 @@
 const assert = require('bsert');
 const crypto = require('crypto');
 const {sha1, sha256} = require('./util/util');
+const {Tree, Proof} = require('../lib/urkel');
 
 const FOO1 = sha1.digest(Buffer.from('foo1'));
 const FOO2 = sha1.digest(Buffer.from('foo2'));
@@ -23,22 +24,24 @@ function random(min, max) {
   return Math.floor(Math.random() * (max - min)) + min;
 }
 
-function runTest(name, Tree, Proof) {
-  function reencode(tree, proof) {
-    const raw = proof.encode(tree.hash, tree.bits);
-    return Proof.decode(raw, tree.hash, tree.bits);
-  }
+function reencode(tree, proof) {
+  const raw = proof.encode(tree.hash, tree.bits);
+  return Proof.decode(raw, tree.hash, tree.bits);
+}
 
-  function rejson(tree, proof) {
-    const json = proof.toJSON(tree.hash, tree.bits);
-    return Proof.fromJSON(json, tree.hash, tree.bits);
-  }
+function rejson(tree, proof) {
+  const json = proof.toJSON(tree.hash, tree.bits);
+  return Proof.fromJSON(json, tree.hash, tree.bits);
+}
 
-  function verify(root, key, proof) {
-    return proof.verify(root, key, sha256, 160);
-  }
+function verify(root, key, proof) {
+  return proof.verify(root, key, sha256, 160);
+}
 
-  async function test() {
+describe('Urkel radix', function() {
+  this.timeout(5000);
+
+  it('should test tree', async () => {
     const tree = new Tree(sha256, 160);
 
     await tree.open();
@@ -198,9 +201,9 @@ function runTest(name, Tree, Proof) {
     }
 
     await tree.close();
-  }
+  });
 
-  async function pummel() {
+  it('should pummel tree', async () => {
     const tree = new Tree(sha256, 160);
     const items = [];
     const set = new Set();
@@ -377,9 +380,9 @@ function runTest(name, Tree, Proof) {
     }
 
     await tree.close();
-  }
+  });
 
-  async function history() {
+  it('should test history independence', async () => {
     const items = [];
     const removed = [];
     const remaining = [];
@@ -462,26 +465,5 @@ function runTest(name, Tree, Proof) {
 
     await tree1.close();
     await tree2.close();
-  }
-
-  describe(name, function() {
-    this.timeout(5000);
-
-    it('should test tree', async () => {
-      await test();
-    });
-
-    it('should pummel tree', async () => {
-      await pummel();
-    });
-
-    it('should test history independence', async () => {
-      await history();
-    });
   });
-}
-
-{
-  const {Tree, Proof} = require('../radix');
-  runTest('Radix', Tree, Proof);
-}
+});
