@@ -1,7 +1,4 @@
-/* eslint-env mocha */
-/* eslint prefer-arrow-callback: "off" */
 /* eslint no-unused-vars: "off" */
-
 'use strict';
 
 const assert = require('bsert');
@@ -205,7 +202,7 @@ describe('Urkel radix', function() {
     await tree.close();
   });
 
-  it('should test max value', async () => {
+  it('should test max value size', async () => {
     const MAX_VALUE = 0x3ff;
     const tree = new Tree(sha256, 160);
 

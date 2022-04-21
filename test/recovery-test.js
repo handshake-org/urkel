@@ -1,16 +1,11 @@
-/* eslint-env mocha */
-/* eslint prefer-arrow-callback: "off" */
-/* eslint no-unused-vars: "off" */
-
 'use strict';
 
 const assert = require('bsert');
-const crypto = require('crypto');
 const {tmpdir} = require('os');
 const path = require('path');
 const fs = require('bfile');
-const {Tree, Proof} = require('../lib/urkel');
-const {sha1, sha256} = require('./util/util');
+const {Tree} = require('../lib/urkel');
+const {sha256} = require('./util/util');
 
 function key(bits) {
   return Buffer.from([bits]);
