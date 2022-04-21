@@ -1,5 +1,9 @@
 # Urkel Tree
 
+[![Build Status][ci-status-img]][ci-status-url]
+[![Coverage Status][coverage-status-img]][coverage-status-url]
+
+
 An optimized and cryptographically provable key-value store.
 
 ## Design
@@ -144,3 +148,7 @@ See LICENSE for more info.
 [3]: https://github.com/bramcohen/MerkleSet
 [4]: https://www.deadalnix.me/2016/09/24/introducing-merklix-tree-as-an-unordered-merkle-tree-on-steroid/
 [5]: https://handshake.org/files/handshake.txt
+[coverage-status-img]: https://coveralls.io/repos/github/handshake-org/urkel/badge.svg?branch=master
+[coverage-status-url]: https://coveralls.io/github/handshake-org/urkel?branch=master
+[ci-status-img]: https://github.com/handshake-org/urkel/workflows/Build/badge.svg
+[ci-status-url]: https://github.com/handshake-org/urkel/tree/master
