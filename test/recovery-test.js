@@ -35,7 +35,11 @@ describe('Recovery Test', function() {
   for (const dir of [location, null]) {
     describe(`${dir ? 'Disk': 'Memory'}`, function() {
       it('should init tree', async () => {
-        tree = new Tree(sha256, 8, dir);
+        tree = new Tree({
+          hash: sha256,
+          bits: 8,
+          prefix: dir
+        });
         await tree.open();
         txn = tree.transaction();
       });

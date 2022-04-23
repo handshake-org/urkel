@@ -41,7 +41,10 @@ describe('Urkel radix', function() {
   this.timeout(5000);
 
   it('should test tree', async () => {
-    const tree = new Tree(sha256, 160);
+    const tree = new Tree({
+      hash: sha256,
+      bits: 160
+    });
 
     await tree.open();
 
@@ -204,7 +207,10 @@ describe('Urkel radix', function() {
 
   it('should test max value size', async () => {
     const MAX_VALUE = 0x3ff;
-    const tree = new Tree(sha256, 160);
+    const tree = new Tree({
+      hash: sha256,
+      bits: 160
+    });
 
     await tree.open();
 
@@ -246,7 +252,11 @@ describe('Urkel radix', function() {
   });
 
   it('should pummel tree', async () => {
-    const tree = new Tree(sha256, 160);
+    const tree = new Tree({
+      hash: sha256,
+      bits: 160
+    });
+
     const items = [];
     const set = new Set();
 
@@ -435,10 +445,15 @@ describe('Urkel radix', function() {
       items.push([key, value]);
     }
 
-    const tree1 = new Tree(sha256, 160);
+    const opts = {
+      hash: sha256,
+      bits: 160
+    };
+
+    const tree1 = new Tree(opts);
     await tree1.open();
 
-    const tree2 = new Tree(sha256, 160);
+    const tree2 = new Tree(opts);
     await tree2.open();
 
     let root = null;
