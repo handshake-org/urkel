@@ -63,8 +63,9 @@ describe('Recovery Test', function() {
       });
 
       it('should clear tree store rootCache', async () => {
-        // Normally only happens on tree.store.close();
-        tree.store.rootCache.clear();
+        // Just do manual cache reset
+        // clears cache and reset indexer ptr.
+        tree.store.resetCache();
       });
 
       it('should restore tree from first saved root', async () => {
