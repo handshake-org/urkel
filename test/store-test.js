@@ -102,6 +102,9 @@ describe('Store', function() {
         assert(mapHasSet(rootCache, roots));
 
         await tree.close();
+
+        // make sure root is cleared on close.
+        assert.strictEqual(rootCache.size, 0);
       });
 
       it('should not recover hashes when initCacheSize is 0', async () => {
@@ -123,12 +126,15 @@ describe('Store', function() {
         assert(mapHasSet(rootCache, roots));
         await tree.close();
 
+        // make sure root is cleared on close.
+        assert.strictEqual(rootCache.size, 0);
+
         // test
         await tree.open();
         // last meta root itself is getting cached.
         assert.strictEqual(rootCache.size, 1);
 
-        const {lastMeta, indexMeta} = tree.store;
+        const {lastMeta, lastCachedMeta} = tree.store;
 
         // cache one more thing.
         roots = new Set([
@@ -140,8 +146,8 @@ describe('Store', function() {
         assert.strictEqual(rootCache.size, roots.size);
         assert(mapHasSet(rootCache, roots));
 
-        // indexMeta does not go forward
-        assert.strictEqual(indexMeta, tree.store.indexMeta);
+        // lastCachedMeta does not go forward
+        assert.strictEqual(lastCachedMeta, tree.store.lastCachedMeta);
         assert.notStrictEqual(lastMeta, tree.store.lastMeta);
 
         await tree.close();
@@ -161,6 +167,9 @@ describe('Store', function() {
         assert.strictEqual(rootCache.size, 10);
         assert(mapHasSet(rootCache, roots));
         await tree.close();
+
+        // make sure root is cleared on close.
+        assert.strictEqual(rootCache.size, 0);
 
         await tree.open();
         assert.strictEqual(rootCache.size, 10);
@@ -187,14 +196,17 @@ describe('Store', function() {
         assert(mapHasSet(rootCache, roots));
         await tree.close();
 
+        // make sure root is cleared on close.
+        assert.strictEqual(rootCache.size, 0);
+
         await tree.open();
         assert.strictEqual(rootCache.size, initialRootCount);
         const lastThree = new Set([...roots].slice(-initialRootCount));
         assert(mapHasSet(rootCache, lastThree));
 
-        // make sure indexMeta is correctly set to the last indexed root.
+        // make sure lastCachedMeta is correctly set to the last indexed root.
         const last = [...rootCache.values()][initialRootCount - 1].hash();
-        const checkRoot = await tree.store.readRoot(tree.store.indexMeta.rootPtr);
+        const checkRoot = await tree.store.readRoot(tree.store.lastCachedMeta.rootPtr);
         assert.bufferEqual(last, checkRoot.hash());
 
         await tree.close();
@@ -219,8 +231,11 @@ describe('Store', function() {
         rootHashes = [...rootCache.values()].map(n => n.hash(tree.hash));
         await tree.close();
 
+        // make sure root is cleared on close.
+        assert.strictEqual(rootCache.size, 0);
+
         await tree.open();
-        const {lastMeta, indexMeta} = tree.store;
+        const {lastMeta, lastCachedMeta} = tree.store;
         assert.strictEqual(rootCache.size, 1);
 
         const checkTreeRoots = [];
@@ -239,9 +254,9 @@ describe('Store', function() {
         for (let i = 1; i < checkTreeRoots.length; i++)
           assert.strictEqual(checkTreeRoots[i], null);
 
-        // neither lastMeta nor indexMeta should change.
+        // neither lastMeta nor lastCachedMeta should change.
         assert.strictEqual(lastMeta, tree.store.lastMeta);
-        assert.strictEqual(indexMeta, tree.store.indexMeta);
+        assert.strictEqual(lastCachedMeta, tree.store.lastCachedMeta);
 
         await tree.close();
       });
@@ -269,8 +284,11 @@ describe('Store', function() {
         rootHashes = [...rootCache.values()].map(n => n.hash(tree.hash));
         await tree.close();
 
+        // make sure root is cleared on close.
+        assert.strictEqual(rootCache.size, 0);
+
         await tree.open();
-        const {lastMeta, indexMeta} = tree.store;
+        const {lastMeta, lastCachedMeta} = tree.store;
         assert.strictEqual(rootCache.size, initialRootCount);
 
         const checkTreeRoots = [];
@@ -291,9 +309,9 @@ describe('Store', function() {
         for (let i = initialRootCount + 1; i < checkTreeRoots.length; i++)
           assert.strictEqual(checkTreeRoots[i], null);
 
-        // neither lastMeta nor indexMeta should change.
+        // neither lastMeta nor lastCachedMeta should change.
         assert.strictEqual(lastMeta, tree.store.lastMeta);
-        assert.strictEqual(indexMeta, tree.store.indexMeta);
+        assert.strictEqual(lastCachedMeta, tree.store.lastCachedMeta);
 
         await tree.close();
       });
@@ -328,9 +346,12 @@ describe('Store', function() {
           await tree.close();
         }
 
+        // make sure root is cleared on close.
+        assert.strictEqual(rootCache.size, 0);
+
         // test
         await tree.open();
-        const {lastMeta, indexMeta} = tree.store;
+        const {lastMeta, lastCachedMeta} = tree.store;
 
         assert.strictEqual(rootCache.size, initialRootCount);
 
@@ -350,7 +371,7 @@ describe('Store', function() {
           assert.notStrictEqual(checkTreeRoots[i], null);
 
         assert.strictEqual(lastMeta, tree.store.lastMeta);
-        assert.notStrictEqual(indexMeta, tree.store.indexMeta);
+        assert.notStrictEqual(lastCachedMeta, tree.store.lastCachedMeta);
 
         await tree.close();
       });
