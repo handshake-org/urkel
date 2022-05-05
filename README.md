@@ -1,5 +1,9 @@
 # Urkel Tree
 
+[![Build Status][ci-status-img]][ci-status-url]
+[![Coverage Status][coverage-status-img]][coverage-status-url]
+
+
 An optimized and cryptographically provable key-value store.
 
 ## Design
@@ -46,7 +50,7 @@ A more in-depth description is available in the [Handshake Whitepaper][5].
 
 ## Backends
 
-There are currently three different backends:
+There used to be three different backends:
 
 - `urkel/trie` - A simple base-2 merkelized trie whose design shares
   similarities with earlier work done by [Bram Cohen][3].
@@ -54,6 +58,11 @@ There are currently three different backends:
   to Amaury Séchet's [Merklix tree][4].
 - `urkel/optimized` - A memory and storage optimized version of the simplified
   trie.
+
+These can all still be found in the
+[`old-variants`](https://github.com/handshake-org/urkel/tree/old-variants)
+branch of this repository.
+Only the `radix` variant is currently maintained by The Handshake Developers.
 
 ## Usage
 
@@ -139,3 +148,7 @@ See LICENSE for more info.
 [3]: https://github.com/bramcohen/MerkleSet
 [4]: https://www.deadalnix.me/2016/09/24/introducing-merklix-tree-as-an-unordered-merkle-tree-on-steroid/
 [5]: https://handshake.org/files/handshake.txt
+[coverage-status-img]: https://coveralls.io/repos/github/handshake-org/urkel/badge.svg?branch=master
+[coverage-status-url]: https://coveralls.io/github/handshake-org/urkel?branch=master
+[ci-status-img]: https://github.com/handshake-org/urkel/workflows/Build/badge.svg
+[ci-status-url]: https://github.com/handshake-org/urkel/tree/master

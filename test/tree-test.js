@@ -1,18 +1,18 @@
-/* eslint-env mocha */
-/* eslint prefer-arrow-callback: "off" */
 /* eslint no-unused-vars: "off" */
-
 'use strict';
 
 const assert = require('bsert');
 const crypto = require('crypto');
 const {sha1, sha256} = require('./util/util');
+const {Tree, Proof} = require('../lib/urkel');
 
 const FOO1 = sha1.digest(Buffer.from('foo1'));
 const FOO2 = sha1.digest(Buffer.from('foo2'));
 const FOO3 = sha1.digest(Buffer.from('foo3'));
 const FOO4 = sha1.digest(Buffer.from('foo4'));
 const FOO5 = sha1.digest(Buffer.from('foo5'));
+const FOO6 = sha1.digest(Buffer.from('foo6'));
+const FOO7 = sha1.digest(Buffer.from('foo7'));
 
 const BAR1 = Buffer.from('bar1');
 const BAR2 = Buffer.from('bar2');
@@ -23,22 +23,24 @@ function random(min, max) {
   return Math.floor(Math.random() * (max - min)) + min;
 }
 
-function runTest(name, Tree, Proof) {
-  function reencode(tree, proof) {
-    const raw = proof.encode(tree.hash, tree.bits);
-    return Proof.decode(raw, tree.hash, tree.bits);
-  }
+function reencode(tree, proof) {
+  const raw = proof.encode(tree.hash, tree.bits);
+  return Proof.decode(raw, tree.hash, tree.bits);
+}
 
-  function rejson(tree, proof) {
-    const json = proof.toJSON(tree.hash, tree.bits);
-    return Proof.fromJSON(json, tree.hash, tree.bits);
-  }
+function rejson(tree, proof) {
+  const json = proof.toJSON(tree.hash, tree.bits);
+  return Proof.fromJSON(json, tree.hash, tree.bits);
+}
 
-  function verify(root, key, proof) {
-    return proof.verify(root, key, sha256, 160);
-  }
+function verify(root, key, proof) {
+  return proof.verify(root, key, sha256, 160);
+}
 
-  async function test() {
+describe('Urkel radix', function() {
+  this.timeout(5000);
+
+  it('should test tree', async () => {
     const tree = new Tree(sha256, 160);
 
     await tree.open();
@@ -198,9 +200,52 @@ function runTest(name, Tree, Proof) {
     }
 
     await tree.close();
-  }
+  });
 
-  async function pummel() {
+  it('should test max value size', async () => {
+    const MAX_VALUE = 0x3ff;
+    const tree = new Tree(sha256, 160);
+
+    await tree.open();
+
+    // Max Value
+    {
+      const max = Buffer.alloc(MAX_VALUE);
+      const batch = tree.batch();
+
+      await batch.insert(FOO6, max);
+
+      const root = await batch.commit();
+      assert.strictEqual(root.length, tree.hash.size);
+
+      const check = await tree.get(FOO6);
+
+      assert.bufferEqual(check, max);
+    }
+
+    // Max value + 1
+    {
+      let err;
+      try {
+        const maxPlus = Buffer.alloc(MAX_VALUE + 1);
+        const batch = tree.batch();
+
+        await batch.insert(FOO7, maxPlus);
+        const root = await batch.commit();
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err, 'Expected error on max + 1 value.');
+
+      const value = await tree.get(FOO7);
+      assert.strictEqual(value, null, 'Expected FOO7 not to exist.');
+
+      await tree.close();
+    }
+  });
+
+  it('should pummel tree', async () => {
     const tree = new Tree(sha256, 160);
     const items = [];
     const set = new Set();
@@ -377,9 +422,9 @@ function runTest(name, Tree, Proof) {
     }
 
     await tree.close();
-  }
+  });
 
-  async function history() {
+  it('should test history independence', async () => {
     const items = [];
     const removed = [];
     const remaining = [];
@@ -462,36 +507,5 @@ function runTest(name, Tree, Proof) {
 
     await tree1.close();
     await tree2.close();
-  }
-
-  describe(name, function() {
-    this.timeout(5000);
-
-    it('should test tree', async () => {
-      await test();
-    });
-
-    it('should pummel tree', async () => {
-      await pummel();
-    });
-
-    it('should test history independence', async () => {
-      await history();
-    });
   });
-}
-
-{
-  const {Tree, Proof} = require('../optimized');
-  runTest('Optimized', Tree, Proof);
-}
-
-{
-  const {Tree, Proof} = require('../trie');
-  runTest('Trie', Tree, Proof);
-}
-
-{
-  const {Tree, Proof} = require('../radix');
-  runTest('Radix', Tree, Proof);
-}
+});

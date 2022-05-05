@@ -1,0 +1,37 @@
+name: Build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [8.x, 12.x, 14.x, 16.x, 18.x]
+
+    steps:
+
+    - uses: actions/checkout@v2
+    - name: Setup
+      uses: actions/setup-node@v2
+
+    - name: Install
+      run: sudo apt-get install -y libunbound-dev |
+           npm install nyc coveralls bslint @hns-dev/bsdoc
+
+    - name: Lint
+      run: npm run lint-ci
+
+    - name: Test
+      run: npm run test-ci
+
+    - name: Coverage
+      uses: coverallsapp/github-action@master
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}

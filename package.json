@@ -16,8 +16,11 @@
   "main": "./lib/urkel.js",
   "scripts": {
     "lint": "eslint lib/ bench/ test/ || exit 0",
+    "lint-file": "eslint",
+    "lint-ci": "eslint lib/ bench/ test/",
     "test": "bmocha --reporter spec test/*-test.js",
-    "test-file": "bmocha --reporter spec"
+    "test-file": "bmocha --reporter spec",
+    "test-ci": "nyc --reporter lcov bmocha -- --reporter spec test/*.js"
   },
   "dependencies": {
     "bfile": "~0.2.1",
@@ -25,6 +28,7 @@
     "bsert": "~0.0.10"
   },
   "devDependencies": {
+    "bcrypto": "^5.4.0",
     "bmocha": "^2.1.0"
   },
   "engines": {
