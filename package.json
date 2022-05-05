@@ -28,6 +28,7 @@
     "bsert": "~0.0.10"
   },
   "devDependencies": {
+    "bcrypto": "^5.4.0",
     "bmocha": "^2.1.0"
   },
   "engines": {

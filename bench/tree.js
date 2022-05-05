@@ -11,7 +11,7 @@ const util = require('./util');
 
 const argv = process.argv.slice();
 
-const Tree = require('../radix').Tree;
+const {Tree} = require('../lib/urkel');
 
 const BLOCKS = +argv[3] || 10000;
 const PER_BLOCK = +argv[4] || 300;
