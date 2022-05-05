@@ -64,7 +64,7 @@ describe('Recovery Test', function() {
 
       it('should clear tree store rootCache', async () => {
         // Just do manual cache reset
-        // clears cache and reset indexer ptr.
+        // clears cache and resets cache ptr.
         tree.store.resetCache();
       });
 
