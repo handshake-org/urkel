@@ -66,7 +66,7 @@ Only the `radix` variant is currently maintained by The Handshake Developers.
 
 ## Usage
 
-``` js
+```javascript
 const bcrypto = require('bcrypto');
 const urkel = require('urkel');
 const {BLAKE2b, randomBytes} = bcrypto;
@@ -74,7 +74,11 @@ const {Tree, Proof} = urkel;
 
 // Create a tree using blake2b-256
 // and a depth/key-size of 256 bits.
-const tree = new Tree(BLAKE2b, 256, '/path/to/my/db');
+const tree = new Tree({
+  hash: BLAKE2b,
+  bits: 256,
+  prefix: '/path/to/my/db'
+});
 
 await tree.open();
 

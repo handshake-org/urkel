@@ -35,7 +35,11 @@ describe('Recovery Test', function() {
   for (const dir of [location, null]) {
     describe(`${dir ? 'Disk': 'Memory'}`, function() {
       it('should init tree', async () => {
-        tree = new Tree(sha256, 8, dir);
+        tree = new Tree({
+          hash: sha256,
+          bits: 8,
+          prefix: dir
+        });
         await tree.open();
         txn = tree.transaction();
       });
@@ -59,8 +63,9 @@ describe('Recovery Test', function() {
       });
 
       it('should clear tree store rootCache', async () => {
-        // Normally only happens on tree.store.close();
-        tree.store.rootCache.clear();
+        // Just do manual cache reset
+        // clears cache and resets cache ptr.
+        tree.store.resetCache();
       });
 
       it('should restore tree from first saved root', async () => {
