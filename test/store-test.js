@@ -6,6 +6,7 @@ const path = require('path');
 const fs = require('bfile');
 const {sha256} = require('./util/util');
 const {Tree} = require('../lib/urkel');
+const os = require('os');
 
 let keyCounter = 0;
 
@@ -373,6 +374,93 @@ describe('Store', function() {
         assert.strictEqual(lastMeta, tree.store.lastMeta);
         assert.notStrictEqual(lastCachedMeta, tree.store.lastCachedMeta);
 
+        await tree.close();
+      });
+
+      it('should compact tree', async function() {
+        if (memory || os.platform() !== 'linux')
+          this.skip();
+
+        const initCacheSize = -1;
+        const name = 'tree';
+        const finalPrefix = path.join(prefix, name);
+        const isRandomPath = (dirname) => {
+          const regex = new RegExp(`^${name}\.[0-9a-v]+~$`);
+          return regex.test(dirname);
+        };
+
+        const opts = {
+          ...options,
+          prefix: finalPrefix,
+          initCacheSize
+        };
+        const tree = new Tree(opts);
+        await tree.open();
+
+        const changes = [];
+        const watcher = fs.watch(prefix, {
+          persistent: false
+        }, (_, file) => {
+          changes.push(file);
+        });
+
+        watcher.unref();
+
+        await populateTree(tree, 10, 10);
+        await tree.compact();
+
+        assert.strictEqual(changes.length, 4);
+        // we create tmp dir
+        assert(isRandomPath(changes[0]));
+        // we remove tree
+        assert.strictEqual(changes[1], name);
+        // we move tmp to tree
+        assert(isRandomPath(changes[2]));
+        assert.strictEqual(changes[3], name);
+
+        watcher.close();
+        await tree.close();
+      });
+
+      it('should compact tree custom prefix', async () => {
+        if (memory || os.platform() !== 'linux')
+          this.skip();
+
+        const initCacheSize = -1;
+        const name = 'tree';
+        const custom = 'tree.tmp';
+        const finalPrefix = path.join(prefix, name);
+
+        const opts = {
+          ...options,
+          prefix: finalPrefix,
+          initCacheSize
+        };
+        const tree = new Tree(opts);
+        await tree.open();
+
+        const changes = [];
+        const watcher = fs.watch(prefix, {
+          persistent: false
+        }, (_, file) => {
+          changes.push(file);
+        });
+
+        watcher.unref();
+
+        await populateTree(tree, 10, 10);
+        await tree.compact(path.join(prefix, custom));
+
+        assert.strictEqual(changes.length, 4);
+        // we create tmp dir
+        assert.strictEqual(changes[0], custom);
+        // we remove tree
+        assert.strictEqual(changes[1], name);
+        // we move tmp to tree
+        assert.strictEqual(changes[2], custom);
+        assert.strictEqual(changes[3], name);
+
+        watcher.close();
         await tree.close();
       });
     });
