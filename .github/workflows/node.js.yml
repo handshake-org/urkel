@@ -7,26 +7,40 @@ on:
     branches: [master]
 
 jobs:
-  build:
-
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Setup
+      uses: actions/setup-node@v3
+      with:
+        node-version: 18.x
+
+    - name: Install dependencies
+      run: npm install --location=global bslint
+
+    - name: Lint
+      run: npm run lint
+
+  test:
+    runs-on: ${{ matrix.os }}
 
     strategy:
       matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
         node-version: [8.x, 12.x, 14.x, 16.x, 18.x]
 
-    steps:
 
+    steps:
     - uses: actions/checkout@v2
     - name: Setup
       uses: actions/setup-node@v2
 
     - name: Install
-      run: sudo apt-get install -y libunbound-dev |
-           npm install nyc coveralls bslint @hns-dev/bsdoc
-
-    - name: Lint
-      run: npm run lint-ci
+      run: npm install nyc coveralls
 
     - name: Test
       run: npm run test-ci
