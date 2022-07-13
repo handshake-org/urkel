@@ -48,6 +48,22 @@ describe('Urkel radix', function() {
 
     await tree.open();
 
+    // Create an empty non-existence proof and verify.
+    {
+      const ss = tree.snapshot(tree.rootHash());
+      const proof = await ss.prove(FOO1);
+      assert.deepStrictEqual(reencode(tree, proof), proof);
+      assert.deepStrictEqual(rejson(tree, proof), proof);
+      const [code, data] = verify(tree.rootHash(), FOO1, proof);
+      assert.strictEqual(code, 0);
+      assert.strictEqual(data, null);
+
+      assert.bufferEqual(
+        tree.rootHash(),
+        proof.computeRoot(FOO1, tree.hash, tree.bits)
+      );
+    }
+
     const batch = tree.batch();
 
     // Insert some values.
@@ -103,6 +119,8 @@ describe('Urkel radix', function() {
       const [code, data] = verify(first, FOO2, proof);
       assert.strictEqual(code, 0);
       assert.bufferEqual(data, BAR2);
+
+      assert.bufferEqual(first, proof.computeRoot(FOO2, tree.hash, tree.bits));
     }
 
     // Create a non-existent proof and verify.
@@ -114,6 +132,8 @@ describe('Urkel radix', function() {
       const [code, data] = verify(first, FOO5, proof);
       assert.strictEqual(code, 0);
       assert.strictEqual(data, null);
+
+      assert.bufferEqual(first, proof.computeRoot(FOO5, tree.hash, tree.bits));
     }
 
     // Create a non-existent proof and verify.
@@ -125,6 +145,8 @@ describe('Urkel radix', function() {
       const [code, data] = verify(first, FOO4, proof);
       assert.strictEqual(code, 0);
       assert.strictEqual(data, null);
+
+      assert.bufferEqual(first, proof.computeRoot(FOO4, tree.hash, tree.bits));
     }
 
     // Create a proof and verify.
@@ -136,6 +158,11 @@ describe('Urkel radix', function() {
       const [code, data] = verify(tree.rootHash(), FOO2, proof);
       assert.strictEqual(code, 0);
       assert.bufferEqual(data, BAR2);
+
+      assert.bufferEqual(
+        tree.rootHash(),
+        proof.computeRoot(FOO2, tree.hash, tree.bits)
+      );
     }
 
     // Create a non-existent proof and verify.
@@ -147,6 +174,11 @@ describe('Urkel radix', function() {
       const [code, data] = verify(tree.rootHash(), FOO5, proof);
       assert.strictEqual(code, 0);
       assert.strictEqual(data, null);
+
+      assert.bufferEqual(
+        tree.rootHash(),
+        proof.computeRoot(FOO5, tree.hash, tree.bits)
+      );
     }
 
     // Create a proof and verify.
@@ -158,6 +190,11 @@ describe('Urkel radix', function() {
       const [code, data] = verify(tree.rootHash(), FOO4, proof);
       assert.strictEqual(code, 0);
       assert.strictEqual(data, null);
+
+      assert.bufferEqual(
+        tree.rootHash(),
+        proof.computeRoot(FOO4, tree.hash, tree.bits)
+      );
     }
 
     // Iterate over values.
