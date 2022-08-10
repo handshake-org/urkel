@@ -4,7 +4,7 @@ const assert = require('bsert');
 const {tmpdir} = require('os');
 const path = require('path');
 const fs = require('bfile');
-const {sha256} = require('./util/util');
+const {BLAKE2b} = require('bcrypto');
 const {Tree} = require('../lib/urkel');
 const os = require('os');
 
@@ -58,8 +58,8 @@ function mapHasSet(map, set) {
 
 describe('Store', function() {
   const treeOptions = {
-    hash: sha256,
-    bits: 160
+    hash: BLAKE2b,
+    bits: 256
   };
 
   for (const memory of [true, false]) {
