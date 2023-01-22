@@ -3,16 +3,16 @@
 
 const assert = require('bsert');
 const crypto = require('crypto');
-const {sha1, sha256} = require('./util/util');
+const {BLAKE2b} = require('bcrypto');
 const {Tree, Proof} = require('../lib/urkel');
 
-const FOO1 = sha1.digest(Buffer.from('foo1'));
-const FOO2 = sha1.digest(Buffer.from('foo2'));
-const FOO3 = sha1.digest(Buffer.from('foo3'));
-const FOO4 = sha1.digest(Buffer.from('foo4'));
-const FOO5 = sha1.digest(Buffer.from('foo5'));
-const FOO6 = sha1.digest(Buffer.from('foo6'));
-const FOO7 = sha1.digest(Buffer.from('foo7'));
+const FOO1 = BLAKE2b.digest(Buffer.from('foo1'));
+const FOO2 = BLAKE2b.digest(Buffer.from('foo2'));
+const FOO3 = BLAKE2b.digest(Buffer.from('foo3'));
+const FOO4 = BLAKE2b.digest(Buffer.from('foo4'));
+const FOO5 = BLAKE2b.digest(Buffer.from('foo5'));
+const FOO6 = BLAKE2b.digest(Buffer.from('foo6'));
+const FOO7 = BLAKE2b.digest(Buffer.from('foo7'));
 
 const BAR1 = Buffer.from('bar1');
 const BAR2 = Buffer.from('bar2');
@@ -34,7 +34,7 @@ function rejson(tree, proof) {
 }
 
 function verify(root, key, proof) {
-  return proof.verify(root, key, sha256, 160);
+  return proof.verify(root, key, BLAKE2b, 256);
 }
 
 describe('Urkel radix', function() {
@@ -42,8 +42,8 @@ describe('Urkel radix', function() {
 
   it('should test tree', async () => {
     const tree = new Tree({
-      hash: sha256,
-      bits: 160
+      hash: BLAKE2b,
+      bits: 256
     });
 
     await tree.open();
@@ -163,17 +163,17 @@ describe('Urkel radix', function() {
     // Iterate over values.
     {
       const ss = tree.snapshot();
-      const items = [];
+      const items = new Map();
 
       for await (const [key, value] of ss)
-        items.push([key, value]);
+        items.set(key.toString('hex'), value);
 
-      assert.strictEqual(items.length, 3);
-      assert.deepStrictEqual(items, [
-        [FOO1, BAR1],
-        [FOO2, BAR2],
-        [FOO3, BAR3]
-      ]);
+      assert.strictEqual(items.size, 3);
+      assert.deepStrictEqual(items, new Map([
+        [FOO1.toString('hex'), BAR1],
+        [FOO2.toString('hex'), BAR2],
+        [FOO3.toString('hex'), BAR3]
+      ]));
     }
 
     // Test persistence.
@@ -208,8 +208,8 @@ describe('Urkel radix', function() {
   it('should test max value size', async () => {
     const MAX_VALUE = 0x3ff;
     const tree = new Tree({
-      hash: sha256,
-      bits: 160
+      hash: BLAKE2b,
+      bits: 256
     });
 
     await tree.open();
@@ -253,8 +253,8 @@ describe('Urkel radix', function() {
 
   it('should pummel tree', async () => {
     const tree = new Tree({
-      hash: sha256,
-      bits: 160
+      hash: BLAKE2b,
+      bits: 256
     });
 
     const items = [];
@@ -435,20 +435,20 @@ describe('Urkel radix', function() {
   });
 
   it('should test history independence', async () => {
+    const opts = {
+      hash: BLAKE2b,
+      bits: 256
+    };
+
     const items = [];
     const removed = [];
     const remaining = [];
 
     while (items.length < 10000) {
-      const key = crypto.randomBytes(20);
+      const key = crypto.randomBytes(opts.bits / 8);
       const value = crypto.randomBytes(random(1, 100));
       items.push([key, value]);
     }
-
-    const opts = {
-      hash: sha256,
-      bits: 160
-    };
 
     const tree1 = new Tree(opts);
     await tree1.open();
